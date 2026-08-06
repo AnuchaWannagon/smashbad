@@ -155,6 +155,8 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 .step .s-n{ display:block; font-family:'Prompt',sans-serif; font-size:15px; font-weight:800; }
 .step.cur{ color:#15230A; background:var(--lime); border-color:var(--lime); }
 .step.done{ color:var(--lime); border-color:rgba(198,242,78,.55); background:rgba(198,242,78,.08); }
+.flash{ animation:flashcard 1.3s ease; }
+@keyframes flashcard{ 0%{ box-shadow:0 0 0 4px var(--lime); } 100%{ box-shadow:0 0 0 0 rgba(198,242,78,0); } }
 
 /* ---------- เมนูหลักปุ่มใหญ่ ---------- */
 .menu-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
@@ -295,7 +297,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
   <div class="bottomnav"><div class="bottomnav-in">
     <button class="bn-item on" data-v="play" onclick="go('play')"><span class="ic">🏸</span>นัดตี</button>
     <button class="bn-item" data-v="members" onclick="go('members')"><span class="ic">👥</span>สมาชิก</button>
-    <button class="bn-item" data-v="rank" onclick="go('rank')"><span class="ic">🏆</span>อันดับ</button>
+    <button class="bn-item" data-v="rank" onclick="go('rank')"><span class="ic">🏆</span>สถิติ</button>
     <button class="bn-item" data-v="history" onclick="go('history')"><span class="ic">🗂️</span>ประวัติ</button>
   </div></div>
 </div>
@@ -319,6 +321,7 @@ function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : nu
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
 const ADMIN_NAME = "Nu";
+const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
 const DEFAULT_COURT_PRICE = 100;   // ค่าคอร์ทเริ่มต้น (บาท/ชั่วโมง/คอร์ท)
 const DEFAULT_SHUTTLE_PRICE = 60;  // ค่าลูกแบดเริ่มต้น (บาท/ลูก)
@@ -588,25 +591,38 @@ function activeSession(){
 }
 function courtsNeeded(n){ return n>0 ? Math.ceil(n / PLAYERS_PER_COURT) : 0; }
 function stepper(cur, sid){
-  const steps = [["📅","เปิดนัด"],["🙋","ลงชื่อล่วงหน้า"],["🏟️","จองคอร์ท & ตี"],["🏁","สรุปผล"]];
+  const steps = [["📅","เปิดนัด"],["🙋","ลงชื่อ"],["🏟️","จองคอร์ท"],["🏸","เริ่มตี"],["🏁","สรุปผล"]];
   return `<div class="stepper">${steps.map((t,i)=>`
     <div class="step ${i+1<cur?"done":""} ${i+1===cur?"cur":""}" onclick="stepClick(${i+1},'${sid||""}')"><span class="s-n">${i+1<cur?"✓":(i+1)}</span>${t[0]} ${t[1]}</div>`).join("")}</div>`;
 }
-/* แตะปุ่มขั้นตอนเพื่อกระโดดไปแก้ไขขั้นนั้น (รวมขั้นที่ผ่านมาแล้ว) */
+/* แตะปุ่มขั้นตอนเพื่อกระโดดไปขั้นนั้น — ขั้นที่ 4 "เริ่มตี" เป็นขั้นของทุกคน */
 function stepClick(n, sid){
   if(!sid){ if(n===1 && canOpenSession()) openNewSession(); return; }
   const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  if(n===4){                                                        // 🏸 เริ่มตี / บันทึกเซ็ต — ทุกคนกดได้
+    if(s.status==="playing") return jumpToSetForm();
+    if(canManage(s)) return openStartPlay(sid);                     // ผู้จัดการ: เปิดคอร์ทแล้วเริ่มตีได้เลย
+    return toast("รอผู้จัดการเปิดคอร์ท (ขั้นที่ 3) ก่อน — แล้วทุกคนจะบันทึกเซ็ตได้ที่ขั้นนี้");
+  }
   if(!canManage(s)) return toast("เฉพาะ Admin หรือผู้จัดการนัดที่แก้ไขขั้นตอนได้");
   if(n===1){ openEditSession(sid); return; }                       // แก้วัน/สถานที่/เวลา
   if(n===2){
     if(s.status==="playing") return stepBack(sid);                  // ย้อนกลับไปขั้นลงชื่อ
     return toast("อยู่ในขั้นลงชื่อแล้ว — แตะขั้นที่ 1 เพื่อแก้กำหนดการ");
   }
-  if(n===3){ openStartPlay(sid); return; }                          // กรอก/แก้ข้อมูลคอร์ท & เริ่มตี
-  if(n===4){
+  if(n===3){ openStartPlay(sid); return; }                          // กรอก/แก้ข้อมูลคอร์ท
+  if(n===5){
     if(s.status==="playing") return finishSession(sid);
-    return toast("ต้องเริ่มตี (ขั้นที่ 3) ก่อน จึงจะสรุปผลได้");
+    return toast("ต้องเริ่มตี (ขั้นที่ 4) ก่อน จึงจะสรุปผลได้");
   }
+}
+/* กระโดดไปที่ฟอร์มบันทึกเซ็ตทันที (หน้า Active ระหว่างตี) */
+function jumpToSetForm(){
+  closeModal(); go("play");
+  setTimeout(()=>{
+    const el = document.getElementById("setFormCard");
+    if(el){ el.scrollIntoView({behavior:"smooth", block:"start"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"), 1300); }
+  }, 80);
 }
 function setWinner(st){
   const a=Number(st.scoreA), b=Number(st.scoreB);
@@ -975,9 +991,10 @@ function renderOpenSession(s){
       <div class="statbox"><div class="v">${nc}</div><div class="l">คอร์ทที่ควรจอง</div></div>
       <div class="statbox"><div class="v">${PLAYERS_PER_COURT}</div><div class="l">คน/คอร์ท</div></div>
     </div>
+    <button class="btn btn-ghost big-join" onclick="copyAnnounce('${s.id}')">📋 คัดลอกประกาศนัด → วางในไลน์กลุ่ม</button>
     ${canManage(s) ? `
       <div class="banner-warn" style="margin-top:12px; margin-bottom:0;">📣 สำหรับผู้จัดการ: ตอนนี้ลงชื่อแล้ว <b>${n} คน</b> → จองคอร์ทล่วงหน้า <b>${nc} คอร์ท</b> ให้เพียงพอ • ข้อมูลคอร์ท (เลขคอร์ท/ชั่วโมง/ราคา) ค่อยกรอกทีหลังตอนถึงวันตี</div>
-      <button class="btn btn-blue big-join" onclick="openStartPlay('${s.id}')">🏟️ ขั้นที่ 3: เปิดคอร์ท & เริ่มตี (ทำเมื่อถึงวันตี)</button>
+      <button class="btn btn-blue big-join" onclick="openStartPlay('${s.id}')">🏟️ ขั้นที่ 3: เปิดคอร์ท → เริ่มตี (ทำเมื่อถึงวันตี)</button>
     `:""}
     ${stageBar(s)}
   </div>
@@ -989,6 +1006,8 @@ function renderOpenSession(s){
         const m = mem(a.memberId); if(!m) return "";
         return `<span class="chip" style="cursor:default;"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
       }).join("")}</div>`}
+    <div style="height:10px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openEditAttendees('${s.id}')">✏️ แก้ไขการลงชื่อ (ลงชื่อแทน / ถอนชื่อสมาชิก)</button>
   </div>`;
 }
 
@@ -1021,9 +1040,9 @@ function renderPlayingSession(s){
 
   return `
   <div class="sess-hero">
-    ${stepper(3, s.id)}
+    ${stepper(4, s.id)}
     <div class="row">
-      <span class="tag tag-play">● ขั้นที่ 3: กำลังตี</span>
+      <span class="tag tag-play">● ขั้นที่ 4: กำลังตี — บันทึกเซ็ตกันเลย</span>
       ${canManage(s)? `<button class="btn btn-ghost btn-sm" onclick="openStartPlay('${s.id}')">แก้ข้อมูลคอร์ท</button>`:""}
     </div>
     <div class="sess-date">${fmtDate(s.date)}</div>
@@ -1033,7 +1052,8 @@ function renderPlayingSession(s){
       <div class="statbox"><div class="v">${(s.courts||[]).length}</div><div class="l">คอร์ท</div></div>
       <div class="statbox"><div class="v">${totalSets}</div><div class="l">เซ็ตที่ตีแล้ว</div></div>
     </div>
-    ${canManage(s)? `<button class="btn btn-lime big-join" onclick="finishSession('${s.id}')">🏁 ขั้นที่ 4: สรุปผล — จบนัดนี้</button>`
+    <button class="btn btn-lime big-join" onclick="jumpToSetForm()">🏸 บันทึกเซ็ต — ใส่ผลตีรอบนี้</button>
+    ${canManage(s)? `<button class="btn btn-blue big-join" onclick="finishSession('${s.id}')">🏁 ขั้นที่ 5: สรุปผล — จบนัดนี้</button>`
       : `<div class="muted" style="margin-top:12px; text-align:center;">ผู้จัดการนัดจะเป็นคนกด "สรุปผล" เมื่อเลิกตี</div>`}
     ${stageBar(s)}
   </div>
@@ -1045,14 +1065,16 @@ function renderPlayingSession(s){
     <div class="row"><span class="muted">ค่าลูกขนไก่</span><span>${s.shuttlesUsed||0} ลูก × ${money(s.shuttlePrice||0)} = <b>${money(shuttleCost(s))}</b></span></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="setFormCard">
     <h3>✍️ บันทึกเซ็ต <span class="muted" style="font-weight:400;">(สมาชิกที่มาตีช่วยกันบันทึกได้)</span></h3>
+    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:10px;" onclick="openEditAttendees('${s.id}')">✏️ เพิ่ม / แก้ไขคนเข้าตี (ตอนนี้ ${s.attendees.length} คน)</button>
     ${canRecord ? renderSetForm(s) : `<div class="muted">เฉพาะผู้ที่ลงชื่อเข้าร่วมนัดนี้จึงบันทึกผลได้</div>`}
   </div>
 
   <div class="card">
     <h3>📜 เซ็ตทั้งหมด (${totalSets})</h3>
     ${setList}
+    ${totalSets? `<div style="height:10px;"></div><button class="btn btn-ghost btn-block" onclick="copyPlayingUpdate('${s.id}')">📋 คัดลอกผลสด → วางในไลน์กลุ่ม</button>`:""}
   </div>`;
 }
 
@@ -1141,6 +1163,46 @@ async function reopenSession(sid){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
   if(!confirm("เปิดนัดนี้กลับเป็นสถานะ \"กำลังตี\" เพื่อแก้ไขข้อมูล?")) return;
   s.status="playing"; await storeSave(); closeModal(); go("play"); toast("↩️ เปิดนัดกลับมาแก้ไขได้แล้ว");
+}
+
+/* ---------- แก้ไขการลงชื่อแทนสมาชิก (ทุกคนใช้ได้ ทั้งขั้นลงชื่อและขั้นกำลังตี) ---------- */
+function openEditAttendees(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || s.status==="done") return;
+  const inSets = {}; (s.sets||[]).forEach(x=>[...x.teamA, ...x.teamB].forEach(id=> inSets[id]=true));
+  const rows = memberSort(db.members).map(m=>{
+    const joined = s.attendees.some(a=>a.memberId===m.id);
+    const locked = joined && inSets[m.id];
+    return `<div class="court-line">
+      <span style="flex:1;">${m.emoji} ${esc(m.name)}${m.id===meId?' <span class="muted">(คุณ)</span>':""}${locked?' <span class="muted" style="font-size:10.5px;">🔒 มีเซ็ตบันทึกแล้ว</span>':""}</span>
+      ${joined
+        ? `<button class="btn ${locked?"btn-ghost":"btn-danger"} btn-sm" onclick="editAttToggle('${sid}','${m.id}')">${locked?"✓ ร่วมตี":"− ถอนชื่อ"}</button>`
+        : `<button class="btn btn-lime btn-sm" onclick="editAttToggle('${sid}','${m.id}')">+ ลงชื่อ</button>`}
+    </div>`;
+  }).join("");
+  modal(`
+    <div class="modal-head"><h3>✏️ แก้ไขการลงชื่อ (${s.attendees.length} คน)</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:-4px;">นัด ${fmtDateShort(s.date)} — แตะ <b>+ ลงชื่อ</b> เพื่อลงชื่อแทนเพื่อน หรือ <b>− ถอนชื่อ</b> เพื่อถอนออก<br>คนที่มีผลเซ็ตบันทึกแล้วจะถอนชื่อไม่ได้ (ต้องลบเซ็ตนั้นก่อน)</p>
+    ${rows}
+    <div style="height:12px;"></div>
+    <button class="btn btn-lime btn-block" onclick="closeModal(); renderAll();">✓ เสร็จแล้ว</button>`);
+}
+async function editAttToggle(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || s.status==="done") return;
+  const i = s.attendees.findIndex(a=>a.memberId===mid);
+  if(i>=0){
+    const usedInSet = (s.sets||[]).some(x=> x.teamA.includes(mid) || x.teamB.includes(mid));
+    if(usedInSet) return toast("มีผลเซ็ตของ "+nameOf(mid)+" บันทึกไว้ — ต้องลบเซ็ตนั้นก่อนจึงถอนชื่อได้", true);
+    if(!confirm("ถอนชื่อ "+nameOf(mid)+" ออกจากนัดวันที่ "+fmtDateShort(s.date)+"?")) return;
+    s.attendees.splice(i,1);
+    // กันข้อมูลค้าง: ถ้าคนนี้ถูกเลือกอยู่ในฟอร์มบันทึกเซ็ต ให้เอาออกด้วย
+    setDraft.teamA = setDraft.teamA.filter(id=>id!==mid);
+    setDraft.teamB = setDraft.teamB.filter(id=>id!==mid);
+    toast("ถอนชื่อ "+nameOf(mid)+" แล้ว");
+  } else {
+    s.attendees.push({ memberId:mid, hours:2, joinedAt:Date.now(), addedBy:meId });
+    toast("ลงชื่อ "+nameOf(mid)+" เข้าร่วมแล้ว 🙌");
+  }
+  await storeSave(); renderAll(); openEditAttendees(sid);
 }
 
 /* ---------- join / leave ---------- */
@@ -1532,6 +1594,8 @@ function renderSummaryHtml(s){
 
     <button class="btn btn-lime btn-block" onclick="openPayment('${s.id}')">💰 หน้าการจ่ายเงิน — รวม ${money(totalCost(s))}</button>
     <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="copySessionSummary('${s.id}')">📋 คัดลอกสรุปผล → วางในไลน์กลุ่ม</button>
+    <div style="height:8px;"></div>
     <div class="frow">
       <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="closeModal()">◀️ ย้อนกลับ</button>
       ${canMg? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="reopenSession('${s.id}')">✏️ แก้ไข (เปิดนัดกลับ)</button>`:""}
@@ -1631,6 +1695,7 @@ function renderPaymentHtml(s){
 
     <div style="height:12px;"></div>
     ${canMg? `<button class="btn btn-blue btn-block" onclick="openStartPlay('${s.id}')">✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก</button><div style="height:8px;"></div>`:""}
+    ${canMg? `<button class="btn btn-ghost btn-block" onclick="copyPaySummary('${s.id}')">📋 คัดลอกสรุปค่าใช้จ่าย → วางในไลน์กลุ่ม</button><div style="height:8px;"></div>`:""}
     <button class="btn btn-ghost btn-block" onclick="openPayHistory()">🧾 ประวัติการจ่ายเงินทั้งหมด</button>
     <div style="height:8px;"></div>
     <div class="frow">
@@ -1884,6 +1949,8 @@ function openUnpaidAction(sid, mid){
     ${nudged? `<p class="muted" style="margin-top:0;">📣 ส่งแจ้งเตือนล่าสุดเมื่อ ${new Date(nudged.at).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} โดย ${emojiOf(nudged.by)} ${esc(nameOf(nudged.by))}</p>`:""}
     <button class="btn btn-lime btn-block" onclick="sendNudge('${sid}','${mid}')">📣 ส่งแจ้งเตือนให้จ่าย${nudged?" (อีกครั้ง)":""}</button>
     <p class="muted" style="margin:6px 0 10px; font-size:11.5px;">การแจ้งเตือนจะขึ้นเด่นๆ บนหน้าแอปของ ${esc(m.name)} ทุกครั้งที่เปิดแอป จนกว่าจะจ่าย</p>
+    <button class="btn btn-ghost btn-block" onclick="copyNudgeMsg('${sid}','${mid}')">📋 คัดลอกข้อความทวง → วางในไลน์</button>
+    <div style="height:8px;"></div>
     <button class="btn btn-blue btn-block" onclick="togglePaid('${sid}','${mid}')">✓ เปลี่ยนสถานะเป็น "จ่ายแล้ว" (รับเงินแล้ว)</button>
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
@@ -1894,6 +1961,110 @@ async function sendNudge(sid, mid){
   s.payNudge[mid] = { by:meId, at:Date.now() };
   await storeSave(); renderAll(); openPayment(sid);
   toast("📣 ส่งแจ้งเตือนถึง "+nameOf(mid)+" แล้ว");
+}
+
+/* =====================================================
+   คัดลอกข้อความไปวางในไลน์กลุ่ม (LINE)
+   ===================================================== */
+async function copyLine(text){
+  let ok = false;
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); ok = true; }
+  }catch(e){}
+  if(!ok){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+    }catch(e){}
+  }
+  if(ok){ toast("📋 คัดลอกแล้ว — เปิดไลน์กลุ่มแล้ววางได้เลย"); return; }
+  modal(`
+    <div class="modal-head"><h3>📋 คัดลอกข้อความ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">คัดลอกอัตโนมัติไม่ได้ — แตะที่ข้อความด้านล่างเพื่อเลือกทั้งหมด แล้วคัดลอกเอง</p>
+    <textarea readonly style="width:100%; min-height:180px; background:rgba(255,255,255,.06); color:var(--ink); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:10px; font-family:inherit; font-size:14px;" onclick="this.select()">${esc(text)}</textarea>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">ปิด</button>`);
+}
+function copyAnnounce(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const n = s.attendees.length;
+  const names = s.attendees.map(a=>nameOf(a.memberId)).filter(Boolean).join(", ");
+  const txt = "🏸 ก๊วน Smash Badminton Club\n"
+    + "📅 นัดตี " + fmtDate(s.date) + "\n"
+    + "📍 " + (s.loc||"ยังไม่ระบุสถานที่") + "  ⏰ " + (s.time||"-") + "\n"
+    + "🙋 ลงชื่อแล้ว " + n + " คน" + (n ? " : " + names : "") + "\n\n"
+    + "ลงชื่อเข้าร่วม / ถอนชื่อ ได้ในแอป 👇\n" + APP_URL;
+  copyLine(txt);
+}
+function copyPaySummary(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const split = costSplit(s), total = totalCost(s);
+  const lines = s.attendees.map(a=>{
+    const mid = a.memberId, m = mem(mid); if(!m) return "";
+    const paid = !!(s.paid && s.paid[mid]), req = s.payReq && s.payReq[mid];
+    const st = paid ? "✅ จ่ายแล้ว" : req ? "⏳ รออนุมัติ" : "❌ ยังไม่จ่าย";
+    return "• " + m.name + " " + money(split[mid]||0) + " — " + st;
+  }).filter(Boolean).join("\n");
+  const txt = "💰 สรุปค่าใช้จ่าย — นัดตี " + fmtDate(s.date) + "\n"
+    + "รวมทั้งนัด " + money(total) + " (คอร์ท " + money(courtCost(s)) + " + ลูก " + money(shuttleCost(s)) + ")\n\n"
+    + lines + "\n\n"
+    + "จ่ายเงิน / แนบสลิป ได้ในแอป 👇\n" + APP_URL;
+  copyLine(txt);
+}
+function copyNudgeMsg(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); const m = mem(mid); if(!s || !m) return;
+  const txt = "📣 แจ้งเตือนจากก๊วน Smash 🏸\n"
+    + m.emoji + " " + m.name + " ยังค้างค่าตีนัด " + fmtDateShort(s.date) + " จำนวน " + money(payAmt(s,mid)) + " นะครับ\n"
+    + "จ่าย / แนบสลิป ได้ในแอปเลย 👇\n" + APP_URL;
+  copyLine(txt);
+}
+function copyPlayingUpdate(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const sets = s.sets||[];
+  if(!sets.length) return toast("ยังไม่มีเซ็ตที่บันทึก", true);
+  const lines = sets.map((x,i)=>{
+    const a = x.teamA.map(nameOf).join("+"), b = x.teamB.map(nameOf).join("+");
+    const w = setWinner(x);
+    return "เซ็ต " + (i+1) + ": " + (w==="A"?"🏆":"") + a + " " + x.scoreA + " - " + x.scoreB + " " + b + (w==="B"?"🏆":"");
+  }).join("\n");
+  const txt = "🏸 ผลสดจากคอร์ท — ก๊วน Smash " + fmtDateShort(s.date) + "\n"
+    + "📍 " + (s.loc||"-") + " • ผู้เล่น " + s.attendees.length + " คน • ตีแล้ว " + sets.length + " เซ็ต\n\n"
+    + lines + "\n\n"
+    + "ดูสด / บันทึกเซ็ต ได้ในแอป 👇\n" + APP_URL;
+  copyLine(txt);
+}
+function copyRankSummary(){
+  const ranked = careerStats().filter(x=>x.sets>0).sort((a,b)=> b.wr-a.wr || b.w-a.w);
+  if(!ranked.length) return toast("ยังไม่มีสถิติ", true);
+  const medal = ["🥇","🥈","🥉"];
+  const lines = ranked.slice(0,15).map((x,i)=>
+    (medal[i]||("  "+(i+1)+".")) + " " + x.name + " " + Math.round(x.wr*100) + "% (" + x.w + "W-" + x.l + "L)"
+  ).join("\n");
+  const txt = "🏆 สถิติ & อันดับก๊วน Smash Badminton Club\n\n"
+    + lines + (ranked.length>15? "\n…และอีก " + (ranked.length-15) + " คน" : "") + "\n\n"
+    + "ดูสถิติเต็มๆ รายคน ได้ในแอป 👇\n" + APP_URL;
+  copyLine(txt);
+}
+function copySessionSummary(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const st = sessionStats(s);
+  const mvps = sessionMVP(s);
+  const lines = s.attendees.map(a=>{
+    const m = mem(a.memberId); if(!m) return null;
+    const v = st[a.memberId]||{w:0,l:0,sets:0};
+    const wr = v.sets>0? Math.round(v.w/v.sets*100)+"%" : "-";
+    return { n: m.name, mvp: mvps.includes(m.id), w:v.w, l:v.l, wr };
+  }).filter(Boolean).sort((a,b)=> b.w-a.w || a.l-b.l)
+    .map(x=> "• " + x.n + (x.mvp?" ⭐":"") + " " + x.w + "W-" + x.l + "L (" + x.wr + ")").join("\n");
+  const txt = "🏁 สรุปผลนัดตี " + fmtDate(s.date) + " — ก๊วน Smash 🏸\n"
+    + "📍 " + (s.loc||"-") + " • ผู้เล่น " + s.attendees.length + " คน • " + (s.sets||[]).length + " เซ็ต • ใช้ลูก " + (s.shuttlesUsed||0) + " ลูก\n"
+    + (mvps.length? "⭐ MVP: " + mvps.map(nameOf).join(", ") + "\n" : "")
+    + "\n" + lines + "\n\n"
+    + "💰 ค่าใช้จ่ายรวม " + money(totalCost(s)) + " — ดูยอด / จ่ายเงิน ได้ในแอป 👇\n" + APP_URL;
+  copyLine(txt);
 }
 
 function openPendingList(){
@@ -2072,8 +2243,9 @@ function renderRank(){
     </div>`).join("");
   v.innerHTML = `
     <div class="card">
-      <h3>🏆 อันดับก๊วน <span class="muted" style="font-weight:400;">(แตะชื่อดูประวัติรายคน)</span></h3>
-      ${rows || '<div class="empty"><div class="big">🏆</div>ยังไม่มีสถิติ — จบนัดแรกแล้วอันดับจะขึ้นที่นี่</div>'}
+      <h3>🏆 สถิติ & อันดับก๊วน <span class="muted" style="font-weight:400;">(แตะชื่อดูประวัติรายคน)</span></h3>
+      ${rows || '<div class="empty"><div class="big">🏆</div>ยังไม่มีสถิติ — จบนัดแรกแล้วสถิติจะขึ้นที่นี่</div>'}
+      ${rows? `<div style="height:10px;"></div><button class="btn btn-ghost btn-block" onclick="copyRankSummary()">📋 คัดลอกสถิติ → วางในไลน์กลุ่ม</button>`:""}
     </div>
     ${never.length? `<div class="card"><h3>🌱 ยังไม่มีสถิติ</h3><div class="chips">${never.map(x=>`<span class="chip" style="cursor:default;"><span class="av">${x.emoji}</span>${esc(x.name)}</span>`).join("")}</div></div>`:""}`;
 }
