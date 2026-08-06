@@ -1,0 +1,2283 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B1020">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Smash Badminton">
+<title>Smash Badminton Club</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#0B1020;
+  --bg2:#0F1730;
+  --card:#161F38;
+  --card2:#1D2846;
+  --line:#27335A;
+  --ink:#EDF1FF;
+  --ink-soft:#93A0C4;
+  --lime:#C6F24E;
+  --lime-dark:#9CCB2E;
+  --blue:#5B8CFF;
+  --coral:#FF6B5E;
+  --amber:#FFC24B;
+  --green:#3ED598;
+  --radius:16px;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent; min-width:0;}
+html,body{margin:0; padding:0; overflow-x:hidden; max-width:100vw;}
+body{ background:var(--bg); color:var(--ink); font-family:'Noto Sans Thai',sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased;}
+h1,h2,h3,h4,.disp{ font-family:'Prompt',sans-serif; }
+button{ font-family:'Noto Sans Thai',sans-serif; cursor:pointer; }
+input,select{ font-family:'Noto Sans Thai',sans-serif; }
+
+/* ---------- shared ---------- */
+.wrap{ max-width:720px; margin:0 auto; padding:0 16px 90px; }
+.card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
+.card h3{ margin:0 0 12px; font-size:18px; font-weight:800; color:var(--lime); letter-spacing:.01em; display:flex; align-items:center; gap:8px; border-left:4px solid var(--lime); padding-left:10px; }
+.muted{ color:var(--ink-soft); font-size:13.5px; }
+.row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.btn{ border:none; border-radius:12px; padding:13px 20px; font-weight:700; font-size:15.5px; }
+.btn:active{ transform:scale(.97); }
+.btn:disabled{ opacity:.45; }
+.btn-lime{ background:var(--lime); color:#15230A; }
+.btn-blue{ background:var(--blue); color:#fff; }
+.btn-ghost{ background:var(--card2); color:var(--ink); border:1px solid var(--line); }
+.btn-danger{ background:rgba(255,107,94,.15); color:var(--coral); border:1px solid rgba(255,107,94,.35); }
+.btn-sm{ padding:10px 14px; font-size:14px; border-radius:10px; }
+.btn-block{ width:100%; }
+input[type=text],input[type=number],input[type=date],input[type=password],select,textarea{
+  width:100%; background:var(--bg2); color:var(--ink); border:1.5px solid var(--line); border-radius:10px; padding:11px 13px; font-size:15.5px;
+}
+textarea{ font-family:'Noto Sans Thai',sans-serif; resize:vertical; }
+input:focus,select:focus,textarea:focus{ outline:none; border-color:var(--blue); }
+label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
+.field{ margin-bottom:12px; }
+.frow{ display:flex; gap:10px; } .frow .field{ flex:1; }
+.tag{ display:inline-flex; align-items:center; gap:4px; font-size:12.5px; font-weight:700; padding:4px 11px; border-radius:999px; }
+.tag-admin{ background:rgba(255,194,75,.15); color:var(--amber); border:1px solid rgba(255,194,75,.4); }
+.tag-mgr{ background:rgba(91,140,255,.15); color:var(--blue); border:1px solid rgba(91,140,255,.4); }
+.tag-open{ background:rgba(198,242,78,.13); color:var(--lime); border:1px solid rgba(198,242,78,.35); }
+.tag-play{ background:rgba(255,194,75,.13); color:var(--amber); border:1px solid rgba(255,194,75,.35); }
+.tag-done{ background:rgba(147,160,196,.13); color:var(--ink-soft); border:1px solid var(--line); }
+.tag-paid{ background:rgba(62,213,152,.13); color:var(--green); border:1px solid rgba(62,213,152,.4); cursor:pointer; }
+.tag-unpaid{ background:rgba(255,107,94,.13); color:var(--coral); border:1px solid rgba(255,107,94,.4); cursor:pointer; }
+.tag-pending{ background:rgba(255,194,75,.13); color:var(--amber); border:1px solid rgba(255,194,75,.45); }
+.slip-img{ width:100%; max-height:52vh; object-fit:contain; border-radius:12px; border:1px solid var(--line); background:var(--bg2); }
+.banner-due{ background:rgba(255,107,94,.12); border:1px solid rgba(255,107,94,.45); color:var(--coral); border-radius:12px; padding:10px 13px; font-size:12.5px; margin-bottom:12px; cursor:pointer; }
+.banner-approve{ background:rgba(62,213,152,.1); border:1px solid rgba(62,213,152,.5); color:var(--green); border-radius:12px; padding:10px 13px; font-size:12.5px; margin-bottom:12px; cursor:pointer; }
+.banner-due.nudged{ animation:pulseDue 1.6s ease-in-out infinite; }
+@keyframes pulseDue{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,107,94,0); } 50%{ box-shadow:0 0 0 4px rgba(255,107,94,.22); } }
+/* ตัวบอกว่าแอปกำลังทำงาน (ซิงก์เบื้องหลัง) */
+.spin{ display:inline-block; animation:spinCw 1.4s linear infinite; }
+@keyframes spinCw{ to{ transform:rotate(360deg); } }
+.boot-sync{ display:flex; align-items:center; justify-content:center; gap:8px; background:rgba(91,140,255,.12); border:1px solid rgba(91,140,255,.4); color:var(--blue); border-radius:12px; padding:9px 13px; font-size:12.5px; font-weight:700; margin-bottom:12px; }
+.boot-dots::after{ content:""; animation:dots 1.5s steps(4,end) infinite; }
+@keyframes dots{ 0%{content:"";} 25%{content:".";} 50%{content:"..";} 75%{content:"...";} }
+.chip{ display:inline-flex; align-items:center; gap:7px; padding:8px 14px 8px 8px; border-radius:999px; background:var(--card2); border:1.5px solid var(--line); font-size:15px; font-weight:600; cursor:pointer; user-select:none; }
+.chip .av{ width:28px; height:28px; border-radius:50%; background:var(--bg2); display:flex; align-items:center; justify-content:center; font-size:15px; }
+.chip.on{ border-color:var(--lime); background:rgba(198,242,78,.1); }
+.chip.on::after{ content:"✓"; color:var(--lime); font-weight:800; }
+.chip.pa{ border-color:var(--blue); background:rgba(91,140,255,.12); }
+.chip.pa::after{ content:"A"; color:var(--blue); font-weight:800; }
+.chip.pb{ border-color:var(--coral); background:rgba(255,107,94,.12); }
+.chip.pb::after{ content:"B"; color:var(--coral); font-weight:800; }
+.chips{ display:flex; flex-wrap:wrap; gap:8px; }
+.empty{ text-align:center; padding:26px 10px; color:var(--ink-soft); font-size:13.5px; }
+.empty .big{ font-size:32px; margin-bottom:6px; }
+.divider{ height:1px; background:var(--line); margin:14px 0; }
+#toast{ position:fixed; left:50%; bottom:86px; transform:translateX(-50%) translateY(16px); background:var(--lime); color:#15230A; padding:11px 18px; border-radius:999px; font-size:13.5px; font-weight:700; opacity:0; pointer-events:none; transition:all .25s; z-index:999; max-width:90vw; text-align:center; }
+#toast.show{ opacity:1; transform:translateX(-50%); }
+#toast.err{ background:var(--coral); color:#fff; }
+
+/* ---------- login ---------- */
+#loginView{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 16px; background:
+  radial-gradient(600px 320px at 80% -10%, rgba(91,140,255,.25), transparent),
+  radial-gradient(500px 300px at 0% 100%, rgba(198,242,78,.12), transparent), var(--bg); }
+.logo-badge{ width:74px; height:74px; border-radius:22px; background:linear-gradient(140deg, var(--lime), var(--lime-dark)); display:flex; align-items:center; justify-content:center; font-size:38px; margin-bottom:14px; box-shadow:0 10px 30px rgba(198,242,78,.25); }
+#loginView h1{ margin:0 0 2px; font-size:26px; font-weight:800; letter-spacing:-.01em; }
+#loginView .sub{ color:var(--ink-soft); font-size:13px; margin-bottom:22px; }
+.login-panel{ width:100%; max-width:460px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:20px; }
+.member-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:8px; max-height:46vh; overflow-y:auto; }
+.mg-item{ background:var(--card2); border:1.5px solid var(--line); border-radius:12px; padding:10px 6px; text-align:center; cursor:pointer; }
+.mg-item:hover{ border-color:var(--blue); }
+.mg-item .em{ font-size:28px; }
+.mg-item .nm{ font-size:14.5px; font-weight:700; margin-top:3px; word-break:break-word; }
+.mg-item .rl{ font-size:9.5px; color:var(--amber); font-weight:700; }
+.pin-dots{ display:flex; gap:12px; justify-content:center; margin:16px 0; }
+.pin-dot{ width:14px; height:14px; border-radius:50%; border:2px solid var(--line); }
+.pin-dot.fill{ background:var(--lime); border-color:var(--lime); }
+.pin-pad{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+.pin-key{ background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:14px 0; font-size:19px; font-weight:700; color:var(--ink); font-family:'Prompt',sans-serif; }
+.pin-key:active{ background:var(--bg2); }
+.next-banner{ background:linear-gradient(150deg, rgba(198,242,78,.14), rgba(91,140,255,.10)); border:1.5px solid rgba(198,242,78,.45); border-radius:14px; padding:12px 14px; margin-bottom:14px; }
+.next-banner .nb-t{ font-family:'Prompt',sans-serif; font-weight:800; font-size:14px; color:var(--lime); display:flex; align-items:center; gap:8px; }
+.next-banner .nb-d{ font-family:'Prompt',sans-serif; font-weight:800; font-size:17px; margin:3px 0 1px; }
+.next-banner .nb-n{ margin-top:6px; font-size:13.5px; }
+.next-banner .nb-n b{ color:var(--lime); font-size:16px; }
+
+/* ---------- app shell ---------- */
+#appView{ display:none; }
+.topbar{ position:sticky; top:0; z-index:50; background:rgba(11,16,32,.85); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+.topbar-in{ max-width:720px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.brand{ display:flex; align-items:center; gap:10px; }
+.brand .b-ic{ width:36px; height:36px; border-radius:11px; background:linear-gradient(140deg,var(--lime),var(--lime-dark)); display:flex; align-items:center; justify-content:center; font-size:19px; }
+.brand .b-t{ font-family:'Prompt',sans-serif; font-weight:800; font-size:15px; line-height:1.1; }
+.brand .b-s{ font-size:10.5px; color:var(--ink-soft); }
+.mecap{ display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line); border-radius:999px; padding:5px 12px 5px 6px; cursor:pointer; }
+.mecap .av{ width:26px; height:26px; border-radius:50%; background:var(--card2); display:flex; align-items:center; justify-content:center; font-size:14px; }
+.mecap .nm{ font-size:13px; font-weight:700; max-width:88px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.exitbtn{ display:flex; align-items:center; gap:5px; padding:8px 13px; border-radius:999px; background:rgba(255,107,94,.14); border:1px solid rgba(255,107,94,.4); font-size:15px; flex-shrink:0; color:var(--coral); font-weight:800; }
+.exitbtn span{ font-size:12.5px; font-family:'Prompt',sans-serif; }
+.exitbtn:active{ transform:scale(.95); }
+.bottomnav{ position:fixed; bottom:0; left:0; right:0; z-index:50; background:rgba(15,23,48,.92); backdrop-filter:blur(10px); border-top:1px solid var(--line); }
+.bottomnav-in{ max-width:720px; margin:0 auto; display:flex; }
+.bn-item{ flex:1; background:none; border:none; padding:9px 4px 10px; text-align:center; color:var(--ink-soft); font-size:12px; font-weight:700; }
+.bn-item .ic{ font-size:25px; display:block; margin-bottom:2px; filter:grayscale(1) opacity(.65); }
+.bn-item.on{ color:var(--lime); }
+.bn-item.on .ic{ filter:none; }
+.view{ display:none; padding-top:16px; }
+.view.on{ display:block; animation:fade .22s ease; }
+@keyframes fade{ from{opacity:0; transform:translateY(5px);} to{opacity:1;} }
+
+/* ---------- ตัวบอกขั้นตอนนัดตี ---------- */
+.stepper{ display:flex; gap:5px; margin:0 0 14px; }
+.step{ flex:1; text-align:center; font-size:11.5px; font-weight:700; color:var(--ink-soft); background:var(--bg2); border:1px solid var(--line); border-radius:10px; padding:7px 2px 6px; line-height:1.25; cursor:pointer; user-select:none; }
+.step:active{ transform:scale(.96); }
+.step .s-n{ display:block; font-family:'Prompt',sans-serif; font-size:15px; font-weight:800; }
+.step.cur{ color:#15230A; background:var(--lime); border-color:var(--lime); }
+.step.done{ color:var(--lime); border-color:rgba(198,242,78,.55); background:rgba(198,242,78,.08); }
+
+/* ---------- เมนูหลักปุ่มใหญ่ ---------- */
+.menu-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.menu-btn{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 8px 14px; color:var(--ink); font-weight:800; font-size:15px; font-family:'Prompt',sans-serif; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.menu-btn:active{ transform:scale(.97); }
+.menu-btn .mi{ font-size:32px; line-height:1; }
+
+/* ---------- session hero ---------- */
+.sess-hero{ position:relative; border-radius:18px; overflow:hidden; border:1px solid var(--line); background:linear-gradient(150deg,#17223F,#101832); padding:18px; margin-bottom:14px; }
+.sess-hero::before{ content:""; position:absolute; right:-30px; top:-30px; width:160px; height:160px; border-radius:50%; background:radial-gradient(circle, rgba(198,242,78,.14), transparent 70%); }
+.sess-date{ font-family:'Prompt',sans-serif; font-size:23px; font-weight:800; margin:6px 0 2px; color:#fff; text-shadow:0 0 24px rgba(198,242,78,.25); }
+.big-join{ margin-top:14px; width:100%; border:none; border-radius:14px; padding:17px; font-size:18px; font-weight:800; font-family:'Prompt',sans-serif; }
+.court-reco{ display:flex; align-items:center; gap:12px; background:rgba(198,242,78,.08); border:1px dashed rgba(198,242,78,.4); border-radius:13px; padding:12px 14px; margin-top:14px; }
+.court-reco .n{ font-family:'Prompt',sans-serif; font-size:30px; font-weight:800; color:var(--lime); line-height:1; }
+.statgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
+.statbox{ background:var(--bg2); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center; }
+.statbox .v{ font-family:'Prompt',sans-serif; font-size:23px; font-weight:800; }
+.statbox .l{ font-size:12px; color:var(--ink-soft); }
+
+/* set cards */
+.set-card{ background:var(--card2); border:1px solid var(--line); border-radius:13px; padding:12px; margin-bottom:9px; }
+.set-teams{ display:flex; align-items:center; gap:8px; }
+.set-team{ flex:1; text-align:center; font-size:12.5px; font-weight:700; word-break:break-word; }
+.set-team.w{ color:var(--lime); }
+.set-score{ font-family:'Prompt',sans-serif; font-size:21px; font-weight:800; white-space:nowrap; }
+.set-meta{ text-align:center; font-size:11px; color:var(--ink-soft); margin-top:5px; }
+.court-line{ display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); font-size:15px; }
+.court-line:last-child{ border-bottom:none; }
+
+/* summary */
+.sum-total{ text-align:center; background:linear-gradient(150deg,#1A2645,#131C36); border:1px solid var(--line); border-radius:15px; padding:16px; margin-bottom:12px; }
+.sum-total .n{ font-family:'Prompt',sans-serif; font-size:36px; font-weight:800; color:var(--lime); }
+table.tbl{ width:100%; border-collapse:collapse; font-size:14.5px; table-layout:auto; }
+table.tbl td{ word-break:break-word; }
+table.tbl th{ text-align:left; color:var(--ink-soft); font-size:12.5px; font-weight:600; padding:6px 4px; border-bottom:1px solid var(--line); }
+table.tbl td{ padding:8px 4px; border-bottom:1px solid var(--line); }
+table.tbl tr:last-child td{ border-bottom:none; }
+.mvp-band{ display:flex; align-items:center; gap:10px; background:rgba(255,194,75,.1); border:1px solid rgba(255,194,75,.35); border-radius:13px; padding:11px 14px; margin-bottom:12px; }
+
+/* ranking */
+.rank-row{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
+.rank-row:last-child{ border-bottom:none; }
+.rank-no{ font-family:'Prompt',sans-serif; font-weight:800; width:26px; text-align:center; color:var(--ink-soft); }
+.rank-no.r1{ color:var(--amber); font-size:17px; }
+.rank-no.r2{ color:#C9D4F2; font-size:15px; }
+.rank-no.r3{ color:#D8905F; font-size:15px; }
+.rank-av{ width:34px; height:34px; border-radius:50%; background:var(--card2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:17px; }
+.wbar{ height:5px; border-radius:99px; background:var(--bg2); overflow:hidden; margin-top:4px; }
+.wbar i{ display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--lime)); border-radius:99px; }
+
+/* member list */
+.mem-row{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
+.mem-row:last-child{ border-bottom:none; }
+
+/* modal */
+.modal-bg{ position:fixed; inset:0; background:rgba(4,7,16,.72); display:none; align-items:flex-end; justify-content:center; z-index:100; }
+.modal-bg.show{ display:flex; }
+.modal{ background:var(--card); border:1px solid var(--line); border-radius:20px 20px 0 0; width:100%; max-width:720px; max-height:90vh; overflow-y:auto; padding:20px 18px 26px; animation:up .22s ease; }
+@keyframes up{ from{ transform:translateY(26px); opacity:0;} to{ transform:none; opacity:1;} }
+@media(min-width:560px){ .modal-bg{ align-items:center; padding:20px; } .modal{ border-radius:20px; } }
+.modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.modal-head h3{ margin:0; font-size:18.5px; font-weight:800; color:var(--lime); }
+.mclose{ background:var(--card2); border:1px solid var(--line); color:var(--ink); width:30px; height:30px; border-radius:50%; font-size:14px; }
+.emoji-grid{ display:flex; flex-wrap:wrap; gap:6px; }
+.emoji-opt{ width:38px; height:38px; border-radius:11px; border:1.5px solid var(--line); background:var(--card2); font-size:18px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.emoji-opt.sel{ border-color:var(--lime); background:rgba(198,242,78,.12); }
+.banner-warn{ background:rgba(255,194,75,.12); border:1px solid rgba(255,194,75,.4); color:var(--amber); border-radius:12px; padding:10px 13px; font-size:12.5px; margin-bottom:12px; }
+.sess-item{ padding:12px 0; border-bottom:1px solid var(--line); cursor:pointer; }
+.sess-item:last-child{ border-bottom:none; }
+/* ---------- จอมือถือแคบ: บีบให้พอดีจอ ไม่ล้นแนวนอน ---------- */
+@media(max-width:440px){
+  .wrap{ padding:0 10px 90px; }
+  .card{ padding:13px; }
+  .card h3{ font-size:17px; }
+  .topbar-in{ padding:10px 10px; gap:6px; }
+  .brand .b-s{ display:none; }
+  .brand .b-t{ font-size:13.5px; }
+  .brand .b-ic{ width:30px; height:30px; font-size:16px; border-radius:9px; }
+  .mecap{ padding:4px 8px 4px 5px; }
+  .mecap .nm{ max-width:64px; }
+  .mecap .tag{ display:none; }
+  .exitbtn{ padding:7px 10px; font-size:14px; }
+  .exitbtn span{ font-size:11px; }
+  table.tbl{ font-size:12.5px; }
+  table.tbl th{ font-size:11px; }
+  table.tbl td{ padding:7px 3px; }
+  .tag{ font-size:11px; padding:3px 8px; }
+  .step{ font-size:10px; padding:6px 1px 5px; }
+  .step .s-n{ font-size:13px; }
+  .statbox .v{ font-size:19px; }
+  .statbox .l{ font-size:10.5px; }
+  .sess-date{ font-size:20px; }
+  .btn{ font-size:14.5px; padding:12px 14px; }
+  .btn-sm{ font-size:13px; padding:9px 10px; }
+  .frow{ gap:7px; }
+  .sum-total .n{ font-size:30px; }
+  .menu-btn{ font-size:13.5px; padding:13px 4px 12px; }
+  .menu-btn .mi{ font-size:27px; }
+  .modal{ padding:16px 12px 22px; }
+}
+::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginView">
+  <div class="logo-badge">🏸</div>
+  <h1>Smash Badminton</h1>
+  <div class="sub">ก๊วนแบดตบกระจาย — ลงชื่อเข้าใช้เพื่อเข้าร่วมนัดตี</div>
+  <div class="login-panel" id="loginPanel">
+    <div class="boot-sync"><span class="spin">🕐</span> <span class="boot-dots">กำลังเปิดแอป</span></div>
+    <div class="empty"><div class="big">🏸</div>เตรียมข้อมูลก๊วนแป๊บนึง…</div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="appView">
+  <div class="topbar"><div class="topbar-in">
+    <div class="brand">
+      <div class="b-ic">🏸</div>
+      <div><div class="b-t">Smash Badminton</div><div class="b-s">ก๊วนแบดตบกระจาย</div></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="mecap" onclick="openProfile()" id="meCap"></div>
+      <button class="exitbtn" onclick="confirmLogout()" title="ออกจากแอป">🚪<span>Log-out</span></button>
+    </div>
+  </div></div>
+
+  <div class="wrap">
+    <div id="storageWarn" style="display:none;" class="banner-warn">⚠️ โหมดทดลอง: ระบบบันทึกข้อมูลกลางใช้ไม่ได้ ข้อมูลจะหายเมื่อปิดหน้า</div>
+    <div class="view" id="v-play"></div>
+    <div class="view" id="v-members"></div>
+    <div class="view" id="v-rank"></div>
+    <div class="view" id="v-history"></div>
+  </div>
+
+  <div class="bottomnav"><div class="bottomnav-in">
+    <button class="bn-item on" data-v="play" onclick="go('play')"><span class="ic">🏸</span>นัดตี</button>
+    <button class="bn-item" data-v="members" onclick="go('members')"><span class="ic">👥</span>สมาชิก</button>
+    <button class="bn-item" data-v="rank" onclick="go('rank')"><span class="ic">🏆</span>อันดับ</button>
+    <button class="bn-item" data-v="history" onclick="go('history')"><span class="ic">🗂️</span>ประวัติ</button>
+  </div></div>
+</div>
+
+<div id="toast"></div>
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>
+
+<script>
+/* =====================================================
+   SMASH BADMINTON CLUB — multi-user group app
+   Roles: Admin (Nu) / ผู้จัดการนัด (default = Nu, delegate ได้) / สมาชิก
+   ===================================================== */
+"use strict";
+
+/* ---------- constants ---------- */
+const KEY = "smash-badminton-club-v2";
+const LOGIN_KEY = "smash-badminton-login";
+const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จำต่อเครื่อง จนกว่ารหัสจะถูกเปลี่ยน)
+/* จำสถานะล็อกอินไว้ในเครื่อง (ถ้าเบราว์เซอร์อนุญาต) — ใช้แบบกันพังเสมอ */
+function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
+function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
+function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
+const ADMIN_NAME = "Nu";
+const PLAYERS_PER_COURT = 4;
+const DEFAULT_COURT_PRICE = 100;   // ค่าคอร์ทเริ่มต้น (บาท/ชั่วโมง/คอร์ท)
+const DEFAULT_SHUTTLE_PRICE = 60;  // ค่าลูกแบดเริ่มต้น (บาท/ลูก)
+const EMOJIS = ["🏸","🦅","🐯","🔥","🚀","🎯","🐉","🦁","🐺","🦊","🐸","🦈","🌟","⚡","🥷","🐢","🦄","💥","🎾","🐝","🐨","🦖","🍀","🌈"];
+const SEED = [
+  ["Tu",1,0],["Pae CK",2,1],["Lek",2,1],["Jack",2,1],["Mr.A",2,2],["Taeh Sarawut",2,2],
+  ["Noi",2,2],["Pop_Kamon",2,2],["AnanJi III",1,2],["Nu",2,5],["JobJp",0,0],["Tumh",0,0],
+  ["Au Ratthapol",0,0],["Bank Puttipong",0,0],["Pia TU",0,0],["Aun Suwiwat",0,0],["จะริ",0,0],["Mewsic",0,0],
+  ["AK_Jack",0,0],["Tang+",0,0],["Boat",0,0],["Menn",0,0],["Pomh",0,0],["Mix",0,0],["Pat",0,0]
+];
+
+/* รายชื่อสมาชิกชุดใหม่ (Nu ปรับในชีต Member) — ซิงก์เข้าฐานข้อมูลแอปครั้งเดียวด้วยเวอร์ชัน */
+const NAME_SYNC_V = 2;
+const NAME_SYNC = {
+  m1:"Tu", m2:"Pae CK", m3:"Lek", m4:"Jack", m5:"Mr.A", m6:"Taeh Sarawut",
+  m7:"Noi", m8:"Pop_Kamon", m9:"AnanJi III", m10:"Nu", m11:"JobJp", m12:"Tumh",
+  m13:"Au Ratthapol", m14:"Bank Puttipong", m15:"Pia TU", m16:"Aun Suwiwat", m17:"จะริ", m18:"Mewsic",
+  m19:"AK_Jack", m20:"Tang+", m21:"Boat", m22:"Menn", m23:"Pomh", m24:"Mix"
+};
+const NAME_SYNC_ADD = [ {id:"m25", name:"Pat", emoji:"🏸"} ];
+
+/* นัดตัวอย่างย้อนหลัง 4 ครั้ง (ก.ค.-ส.ค. 2569) — เพื่อทดสอบสรุปผล/ค่าใช้จ่าย/สถิติครบทุกขั้นตอน */
+const DEMO_SESSIONS = [
+{
+  id:"demo20260806", date:"2026-08-06", loc:"ยิม 4 มธ. (นัดตัวอย่าง)", time:"18.00-20.00",
+  managerId:"m7", status:"done", createdBy:"m10", finishedAt:1786453200000,
+  attendees:["m10","m7","m1","m2","m3","m4","m5","m6","m8","m9"].map(id=>({memberId:id, hours:2, joinedAt:1786360000000})),
+  courts:[ {no:"1",hours:2,price:150}, {no:"2",hours:2,price:150}, {no:"3",hours:2,price:150} ],
+  shuttlePrice:50, shuttlesUsed:6, costMode:"equal",
+  paid:{ m10:true, m7:true, m1:true, m3:true },
+  payReq:{ m5:{ method:"cash", at:1786452000000 } },
+  sets:[
+    {id:"d1", court:"1", teamA:["m10","m7"], teamB:["m1","m2"], scoreA:21, scoreB:18, shuttle:true,  recordedBy:"m10", at:1786445000000},
+    {id:"d2", court:"2", teamA:["m3","m4"],  teamB:["m5","m6"], scoreA:21, scoreB:15, shuttle:false, recordedBy:"m7",  at:1786445300000},
+    {id:"d3", court:"3", teamA:["m8","m9"],  teamB:["m10","m1"],scoreA:19, scoreB:21, shuttle:true,  recordedBy:"m8",  at:1786446000000},
+    {id:"d4", court:"1", teamA:["m7","m3"],  teamB:["m2","m5"], scoreA:18, scoreB:21, shuttle:false, recordedBy:"m7",  at:1786446600000},
+    {id:"d5", court:"2", teamA:["m4","m8"],  teamB:["m6","m9"], scoreA:21, scoreB:17, shuttle:true,  recordedBy:"m4",  at:1786447200000},
+    {id:"d6", court:"1", teamA:["m10","m2"], teamB:["m7","m4"], scoreA:15, scoreB:21, shuttle:true,  recordedBy:"m10", at:1786448000000},
+    {id:"d7", court:"3", teamA:["m1","m5"],  teamB:["m3","m8"], scoreA:21, scoreB:19, shuttle:true,  recordedBy:"m1",  at:1786448700000},
+    {id:"d8", court:"2", teamA:["m6","m10"], teamB:["m9","m7"], scoreA:21, scoreB:23, shuttle:true,  recordedBy:"m9",  at:1786449500000}
+  ]
+},
+{
+  id:"demo20260730", date:"2026-07-30", loc:"ยิม 4 มธ. (นัดตัวอย่าง)", time:"18.00-20.00",
+  managerId:"m7", status:"done", createdBy:"m10", finishedAt:1785848400000,
+  attendees:["m10","m7","m1","m3","m5","m8","m11","m12"].map(id=>({memberId:id, hours:2, joinedAt:1785750000000})),
+  courts:[ {no:"5",hours:2,price:150}, {no:"6",hours:2,price:150} ],
+  shuttlePrice:50, shuttlesUsed:4, costMode:"equal",
+  paid:{ m10:true, m7:true, m1:true, m3:true, m5:true, m8:true, m11:true, m12:true },
+  sets:[
+    {id:"e1", court:"5", teamA:["m10","m1"], teamB:["m7","m3"],  scoreA:21, scoreB:19, shuttle:true,  recordedBy:"m10", at:1785842000000},
+    {id:"e2", court:"6", teamA:["m5","m8"],  teamB:["m11","m12"],scoreA:21, scoreB:14, shuttle:true,  recordedBy:"m5",  at:1785842600000},
+    {id:"e3", court:"5", teamA:["m10","m11"],teamB:["m5","m7"],  scoreA:18, scoreB:21, shuttle:true,  recordedBy:"m7",  at:1785843300000},
+    {id:"e4", court:"6", teamA:["m1","m12"], teamB:["m3","m8"],  scoreA:21, scoreB:16, shuttle:true,  recordedBy:"m1",  at:1785844000000}
+  ]
+},
+{
+  id:"demo20260723", date:"2026-07-23", loc:"สนามแบด SS Court (นัดตัวอย่าง)", time:"19.00-21.00",
+  managerId:"m7", status:"done", createdBy:"m7", finishedAt:1785243600000,
+  attendees:["m10","m7","m2","m4","m6","m9","m13","m14","m15"].map(id=>({memberId:id, hours:2, joinedAt:1785150000000})),
+  courts:[ {no:"A",hours:2,price:120}, {no:"B",hours:2,price:120}, {no:"C",hours:2,price:120} ],
+  shuttlePrice:50, shuttlesUsed:5, costMode:"equal",
+  paid:{ m10:true, m7:true, m2:true, m4:true, m6:true, m9:true },
+  sets:[
+    {id:"f1", court:"A", teamA:["m10","m2"], teamB:["m7","m4"],  scoreA:21, scoreB:17, shuttle:true,  recordedBy:"m10", at:1785237000000},
+    {id:"f2", court:"B", teamA:["m6","m9"],  teamB:["m13","m14"],scoreA:19, scoreB:21, shuttle:true,  recordedBy:"m6",  at:1785237700000},
+    {id:"f3", court:"C", teamA:["m15","m10"],teamB:["m6","m2"],  scoreA:21, scoreB:23, shuttle:true,  recordedBy:"m15", at:1785238500000},
+    {id:"f4", court:"A", teamA:["m7","m9"],  teamB:["m4","m13"], scoreA:21, scoreB:12, shuttle:true,  recordedBy:"m7",  at:1785239200000},
+    {id:"f5", court:"B", teamA:["m14","m2"], teamB:["m15","m9"], scoreA:21, scoreB:18, shuttle:false, recordedBy:"m14", at:1785240000000}
+  ]
+},
+{
+  id:"demo20260716", date:"2026-07-16", loc:"ยิม 4 มธ. (นัดตัวอย่าง)", time:"18.00-20.00",
+  managerId:"m10", status:"done", createdBy:"m10", finishedAt:1784638800000,
+  attendees:[["m10",2],["m7",2],["m1",1.5],["m2",2],["m5",1],["m6",2],["m16",2],["m17",1.5],["m18",2],["m19",2]].map(x=>({memberId:x[0], hours:x[1], joinedAt:1784550000000})),
+  courts:[ {no:"1",hours:2,price:150}, {no:"2",hours:2,price:150}, {no:"3",hours:2,price:150} ],
+  shuttlePrice:50, shuttlesUsed:6, costMode:"hours",
+  paid:{ m10:true, m7:true, m1:true },
+  sets:[
+    {id:"g1", court:"1", teamA:["m10","m16"],teamB:["m7","m17"], scoreA:21, scoreB:18, shuttle:true,  recordedBy:"m10", at:1784632000000},
+    {id:"g2", court:"2", teamA:["m1","m18"], teamB:["m2","m19"], scoreA:15, scoreB:21, shuttle:true,  recordedBy:"m1",  at:1784632700000},
+    {id:"g3", court:"3", teamA:["m5","m6"],  teamB:["m10","m7"], scoreA:17, scoreB:21, shuttle:true,  recordedBy:"m5",  at:1784633500000},
+    {id:"g4", court:"1", teamA:["m16","m19"],teamB:["m1","m17"], scoreA:21, scoreB:19, shuttle:true,  recordedBy:"m16", at:1784634200000},
+    {id:"g5", court:"2", teamA:["m2","m6"],  teamB:["m18","m10"],scoreA:21, scoreB:16, shuttle:true,  recordedBy:"m2",  at:1784635000000}
+  ]
+}
+];
+/* เรียงรายชื่อ: Admin ก่อน → ผู้จัดการ (ค่าเริ่มต้น) → ที่เหลือเรียงตามตัวอักษร */
+function memberSort(arr){
+  const mgrId = (db && db.settings) ? db.settings.defaultManagerId : null;
+  return [...arr].sort((a,b)=>{
+    const pa = a.role==="admin"?0 : (a.id===mgrId?1:2);
+    const pb = b.role==="admin"?0 : (b.id===mgrId?1:2);
+    if(pa!==pb) return pa-pb;
+    return String(a.name).localeCompare(String(b.name), "th", {sensitivity:"base", numeric:true});
+  });
+}
+
+/* ---------- state ---------- */
+let db = null;          // {members, sessions, settings}
+let meId = null;        // logged-in member id
+let curView = "play";
+let storageOK = true;
+let lastRaw = "";
+let pinBuf = "", pinStage = null, pinFirst = "", loginPick = null;
+let signupMode = false, signupEmoji = "🏸";
+let setDraft = { court:"", teamA:[], teamB:[], scoreA:"", scoreB:"", shuttle:false };
+let histOpen = null;    // session id opened from history
+
+/* ---------- storage backends ----------
+   ลำดับความสำคัญ: Google Sheet (ผ่าน Apps Script) → ที่เก็บข้อมูลกลางของ Claude → โหมดทดลอง
+   ⬇️ ถ้าต้องการฝัง URL ของ Google Apps Script ถาวรในไฟล์ ให้วางระหว่างเครื่องหมายคำพูด เช่น
+   const GAS_URL = "https://script.google.com/macros/s/XXXXX/exec";                    */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzkNtWD-Ty1CsvTY5Im1jnc_tR61i0S-HL_yUiD4GC_QdSLSZIVPZAGYRIwg0eRh5Kr/exec";
+
+let gasOK = false;
+function gasUrl(){
+  if(window.__gasOverride) return window.__gasOverride;
+  if(GAS_URL) return GAS_URL;
+  try{ const m = (location.hash||"").match(/gas=([^&]+)/); if(m) return decodeURIComponent(m[1]); }catch(e){}
+  if(db && db.settings && db.settings.gasUrl) return db.settings.gasUrl;
+  return "";
+}
+function clubKey(){ return window.__clubKey || lsGet(CLUB_LS) || ""; }
+async function gasLoad(){
+  const url = gasUrl(); if(!url) return null;
+  try{
+    const res = await fetch(url + (url.indexOf("?")>=0?"&":"?") + "api=1&k=" + encodeURIComponent(clubKey()), {method:"GET"});
+    const out = await res.json();
+    if(out && out.ok===false && out.error==="unauthorized"){
+      // รหัสก๊วนไม่ถูกต้อง/ถูกเปลี่ยน — ให้ใส่ใหม่
+      lsDel(CLUB_LS); window.__clubKey = null; gasOK = false;
+      if(!window.__reGate){ window.__reGate = true; toast("กรุณาใส่รหัสเข้าก๊วน", true); setTimeout(function(){ location.reload(); }, 1400); }
+      return null;
+    }
+    if(out && out.ok){
+      gasOK = true;
+      if(out.data){ lastRaw = JSON.stringify(out.data); return out.data; }
+      return null;   // ชีตยังว่าง — จะถูกเติมเมื่อบันทึกครั้งแรก
+    }
+  }catch(e){}
+  gasOK = false; return null;
+}
+async function gasSave(){
+  const url = gasUrl(); if(!url) return false;
+  try{
+    const res = await fetch(url, {method:"POST", body: JSON.stringify({data: db, k: clubKey()})});
+    const out = await res.json();
+    if(out && out.ok){ gasOK = true; return true; }
+    if(out && out.conflict && out.data){
+      // มีคนบันทึกข้อมูลใหม่กว่าไปก่อน — รับของใหม่มาใช้
+      gasOK = true;
+      db = out.data; lastRaw = JSON.stringify(db);
+      toast("มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว ลองทำรายการอีกครั้ง");
+      if(meId) renderAll();
+      return true;
+    }
+  }catch(e){}
+  gasOK = false; return false;
+}
+async function claudeLoad(){
+  try{
+    const r = await window.storage.get(KEY, true);
+    storageOK = true;
+    if(r && r.value){ lastRaw = r.value; return JSON.parse(r.value); }
+    return null;
+  }catch(e){ storageOK = false; return null; }
+}
+async function storeSave(){
+  db.rev = (db.rev||0)+1;
+  lastRaw = JSON.stringify(db);
+  const viaGas = await gasSave();                       // 1) Google Sheet
+  try{
+    const ok = await window.storage.set(KEY, JSON.stringify(db), true);  // 2) Claude storage (สำรอง)
+    storageOK = !!ok;
+  }catch(e){ storageOK = false; }
+  if(gasUrl() && !viaGas) toast("⚠️ ซิงก์ Google Sheet ไม่สำเร็จ — จะลองใหม่ในการบันทึกครั้งถัดไป", true);
+  updateSyncBadge();
+}
+function syncLabel(){
+  if(gasUrl() && gasOK) return "☁️ Google Sheet (อัตโนมัติ)";
+  if(gasUrl() && !gasOK) return "⚠️ Google Sheet — เชื่อมต่อไม่ได้";
+  if(storageOK) return "💾 ที่เก็บข้อมูลกลางของ Claude";
+  return "🚫 โหมดทดลอง";
+}
+function updateSyncBadge(){
+  const el = document.getElementById("storageWarn");
+  if(!el) return;
+  el.onclick = openSyncInfo;
+  el.style.cursor = "pointer";
+  if(gasUrl() && gasOK){ el.style.display="none"; }
+  else if(gasUrl() && !gasOK){ el.style.display="block"; el.innerHTML="⚠️ ซิงก์ไม่สำเร็จชั่วคราว — จะลองใหม่อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
+  else if(storageOK){ el.style.display="none"; }
+  else { el.style.display="block"; el.innerHTML="⚠️ โหมดทดลอง — <u>แตะดูรายละเอียด</u>"; }
+}
+
+/* popup รายละเอียดการเชื่อมต่อ (อ่าน/บันทึกทำอัตโนมัติ — หน้าหลักไม่แสดงข้อความยาว) */
+function openSyncInfo(){
+  const ok = gasUrl() && gasOK;
+  modal(`
+    <div class="modal-head"><h3>☁️ สถานะการเชื่อมต่อข้อมูล</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="row" style="margin-bottom:10px;"><span class="muted">สถานะตอนนี้</span><b>${syncLabel()}</b></div>
+    <p class="muted" style="margin-top:0;">แอปอ่านและบันทึกข้อมูลลง Google Sheet ให้อัตโนมัติทุกครั้งที่มีการแก้ไข และดึงข้อมูลใหม่จากเพื่อนทุก 15 วินาที — ไม่ต้องกดอะไรเพิ่ม
+    ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: เช็คอินเทอร์เน็ต แล้วกด \"ลองเชื่อมต่อใหม่\" ข้อมูลที่ค้างจะถูกส่งให้เองในการบันทึกครั้งถัดไป"}</p>
+    <button class="btn btn-lime btn-block" onclick="retrySync()">🔄 ลองเชื่อมต่อใหม่</button>
+    ${(isAdmin()||isDefaultMgr())? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="closeModal(); openGasSetup();">⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)</button>`:""}
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+async function retrySync(){
+  toast("กำลังเชื่อมต่อ…");
+  const remote = await gasLoad();
+  if(remote && (remote.rev||0) > (db.rev||0)){ db = remote; }
+  await storeSave();
+  updateSyncBadge(); if(meId) renderAll();
+  closeModal();
+  toast(gasOK? "☁️ เชื่อมต่อสำเร็จ ข้อมูลซิงก์แล้ว" : "ยังเชื่อมต่อไม่ได้ — จะลองใหม่อัตโนมัติ", !gasOK);
+}
+
+function seedDb(){
+  const members = SEED.map((s,i)=>({
+    id:"m"+(i+1), name:s[0], emoji:EMOJIS[i%EMOJIS.length],
+    pin:null, role: s[0]===ADMIN_NAME ? "admin":"member",
+    baseW:s[1], baseL:s[2]
+  }));
+  const admin = members.find(m=>m.name===ADMIN_NAME);
+  return { rev:0, nameSyncV: NAME_SYNC_V, members, sessions:[], settings:{ defaultManagerId: admin?admin.id:members[0].id } };
+}
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function mem(id){ return db.members.find(m=>m.id===id); }
+function me(){ return mem(meId); }
+function isAdmin(id){ const m = mem(id||meId); return m && m.role==="admin"; }
+function isDefaultMgr(id){ return db.settings.defaultManagerId === (id||meId); }
+function isMgrOf(s,id){ return s.managerId === (id||meId); }
+function canManage(s){ return isAdmin() || isMgrOf(s) ; }
+function canOpenSession(){ return isAdmin() || isDefaultMgr(); }
+function canDeleteMember(targetId){ return isAdmin() || isDefaultMgr() || targetId===meId; }
+function nameOf(id){ const m=mem(id); return m? m.name : "?"; }
+function emojiOf(id){ const m=mem(id); return m? m.emoji : "❔"; }
+function teamLabel(ids){ return ids.map(id=>emojiOf(id)+" "+esc(nameOf(id))).join(" + "); }
+function fmtDate(d){
+  try{ return new Date(d+"T00:00:00").toLocaleDateString("th-TH",{weekday:"long", day:"numeric", month:"long", year:"numeric"}); }
+  catch(e){ return d; }
+}
+function fmtDateShort(d){
+  try{ return new Date(d+"T00:00:00").toLocaleDateString("th-TH",{weekday:"short", day:"numeric", month:"short", year:"2-digit"}); }
+  catch(e){ return d; }
+}
+function money(n){ return "฿" + (Math.round(n*100)/100).toLocaleString("th-TH",{maximumFractionDigits:2}); }
+function toast(msg, err){
+  const t = $("toast");
+  t.textContent = msg; t.className = err? "show err":"show";
+  clearTimeout(window.__tt); window.__tt = setTimeout(()=> t.className="", 2400);
+}
+function modal(html){ $("modalBody").innerHTML = html; $("modalBg").classList.add("show"); }
+function closeModal(){ $("modalBg").classList.remove("show"); }
+$("modalBg").addEventListener("click", e=>{ if(e.target.id==="modalBg") closeModal(); });
+function modalOpen(){ return $("modalBg").classList.contains("show"); }
+
+function activeSession(){
+  const open = db.sessions.filter(s=>s.status!=="done").sort((a,b)=> a.date.localeCompare(b.date));
+  return open[0] || null;
+}
+function courtsNeeded(n){ return n>0 ? Math.ceil(n / PLAYERS_PER_COURT) : 0; }
+function stepper(cur, sid){
+  const steps = [["📅","เปิดนัด"],["🙋","ลงชื่อล่วงหน้า"],["🏟️","จองคอร์ท & ตี"],["🏁","สรุปผล"]];
+  return `<div class="stepper">${steps.map((t,i)=>`
+    <div class="step ${i+1<cur?"done":""} ${i+1===cur?"cur":""}" onclick="stepClick(${i+1},'${sid||""}')"><span class="s-n">${i+1<cur?"✓":(i+1)}</span>${t[0]} ${t[1]}</div>`).join("")}</div>`;
+}
+/* แตะปุ่มขั้นตอนเพื่อกระโดดไปแก้ไขขั้นนั้น (รวมขั้นที่ผ่านมาแล้ว) */
+function stepClick(n, sid){
+  if(!sid){ if(n===1 && canOpenSession()) openNewSession(); return; }
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  if(!canManage(s)) return toast("เฉพาะ Admin หรือผู้จัดการนัดที่แก้ไขขั้นตอนได้");
+  if(n===1){ openEditSession(sid); return; }                       // แก้วัน/สถานที่/เวลา
+  if(n===2){
+    if(s.status==="playing") return stepBack(sid);                  // ย้อนกลับไปขั้นลงชื่อ
+    return toast("อยู่ในขั้นลงชื่อแล้ว — แตะขั้นที่ 1 เพื่อแก้กำหนดการ");
+  }
+  if(n===3){ openStartPlay(sid); return; }                          // กรอก/แก้ข้อมูลคอร์ท & เริ่มตี
+  if(n===4){
+    if(s.status==="playing") return finishSession(sid);
+    return toast("ต้องเริ่มตี (ขั้นที่ 3) ก่อน จึงจะสรุปผลได้");
+  }
+}
+function setWinner(st){
+  const a=Number(st.scoreA), b=Number(st.scoreB);
+  if(a===b) return null; return a>b?"A":"B";
+}
+function courtCost(s){ return (s.courts||[]).reduce((t,c)=> t + (Number(c.hours)||0)*(Number(c.price)||0), 0); }
+function shuttleCost(s){ return (Number(s.shuttlePrice)||0) * (Number(s.shuttlesUsed)||0); }
+function totalCost(s){ return courtCost(s) + shuttleCost(s); }
+function costSplit(s){
+  const out = {};
+  const att = s.attendees||[];
+  if(att.length===0) return out;
+  const total = totalCost(s);
+  if(s.costMode==="hours"){
+    const sum = att.reduce((t,a)=> t+(Number(a.hours)||0), 0);
+    if(sum>0){ att.forEach(a=> out[a.memberId] = total*(Number(a.hours)||0)/sum ); return out; }
+  }
+  att.forEach(a=> out[a.memberId] = total/att.length );
+  return out;
+}
+function sessionStats(s){
+  const st = {};
+  (s.attendees||[]).forEach(a=> st[a.memberId] = {w:0,l:0,sets:0});
+  (s.sets||[]).forEach(x=>{
+    const w = setWinner(x); if(!w) return;
+    const win = w==="A"? x.teamA : x.teamB;
+    const lose = w==="A"? x.teamB : x.teamA;
+    win.forEach(id=>{ if(!st[id]) st[id]={w:0,l:0,sets:0}; st[id].w++; st[id].sets++; });
+    lose.forEach(id=>{ if(!st[id]) st[id]={w:0,l:0,sets:0}; st[id].l++; st[id].sets++; });
+  });
+  return st;
+}
+function sessionMVP(s){
+  const st = sessionStats(s);
+  let max = 0;
+  Object.values(st).forEach(v=>{ if(v.w>max) max=v.w; });
+  if(max===0) return [];
+  return Object.keys(st).filter(id=> st[id].w===max);
+}
+
+/* =====================================================
+   LOGIN  (เลือกชื่อ + PIN 4 หลัก)
+   ===================================================== */
+function nextSessionBanner(){
+  if(window.__booting) return `<div class="next-banner"><div class="nb-t">📅 นัดตีครั้งต่อไป</div><div class="muted" style="margin-top:4px;"><span class="spin">🕐</span> กำลังโหลดข้อมูลนัดล่าสุด<span class="boot-dots"></span></div></div>`;
+  const s = activeSession();
+  if(!s) return `<div class="next-banner"><div class="nb-t">📅 นัดตีครั้งต่อไป</div><div class="muted">ยังไม่มีนัดที่เปิดอยู่ — รอ Admin/ผู้จัดการกำหนดวันตี</div></div>`;
+  const n = (s.attendees||[]).length;
+  return `<div class="next-banner" style="cursor:pointer;" onclick="openNextSessionInfo()">
+    <div class="nb-t">📅 นัดตีครั้งต่อไป ${s.status==="playing"?'<span class="tag tag-play">กำลังตี</span>':'<span class="tag tag-open">เปิดรับลงชื่อ</span>'}</div>
+    <div class="nb-d">${fmtDate(s.date)}</div>
+    <div class="muted">📍 ${esc(s.loc||"-")} • ⏰ ${esc(s.time||"-")}</div>
+    <div class="nb-n">🙋 ลงชื่อเข้าตีแล้ว <b>${n}</b> คน <span class="muted">(แนะนำจอง ${courtsNeeded(n)} คอร์ท)</span></div>
+    <div class="muted" style="margin-top:6px; font-size:11.5px;">👁️ แตะเพื่อดูรายละเอียดและรายชื่อผู้ลงชื่อ</div>
+  </div>`;
+}
+function openNextSessionInfo(){
+  if(window.__booting) return toast("🕐 กำลังโหลดข้อมูลนัด รอสักครู่…");
+  const s = activeSession(); if(!s) return;
+  const n = (s.attendees||[]).length;
+  const mgr = mem(s.managerId);
+  const chips = s.attendees.map(a=>{
+    const m = mem(a.memberId); if(!m) return "";
+    return `<span class="chip" style="cursor:default;"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
+  }).join("");
+  modal(`
+    <div class="modal-head"><h3>📅 รายละเอียดนัดตีครั้งต่อไป</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">วันที่</span><b>${fmtDate(s.date)}</b></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">สถานที่</span><b>📍 ${esc(s.loc||"ยังไม่ระบุ")}</b></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">เวลา</span><b>⏰ ${esc(s.time||"-")}</b></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">ผู้จัดการนัด</span><b>${mgr? mgr.emoji+" "+esc(mgr.name):"-"}</b></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">สถานะ</span>${s.status==="playing"?'<span class="tag tag-play">กำลังตี</span>':'<span class="tag tag-open">เปิดรับลงชื่อ</span>'}</div>
+    <div class="row" style="margin-bottom:10px;"><span class="muted">คอร์ทที่แนะนำให้จอง</span><b>${courtsNeeded(n)} คอร์ท <span class="muted">(${PLAYERS_PER_COURT} คน/คอร์ท)</span></b></div>
+    <div class="divider"></div>
+    <h3 style="font-family:'Prompt',sans-serif; font-size:15px; color:var(--lime); margin:0 0 10px;">🙋 ลงชื่อแล้ว ${n} คน</h3>
+    ${n? `<div class="chips">${chips}</div>` : '<div class="muted">ยังไม่มีใครลงชื่อ</div>'}
+    ${meId? "" : '<p class="muted" style="margin-bottom:0;">ล็อกอินด้วยชื่อของคุณเพื่อลงชื่อเข้าร่วมนัดนี้</p>'}
+    <div style="height:12px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+/* 🔒 หน้าใส่รหัสเข้าก๊วน (เฉพาะสมาชิก) */
+async function submitClubKey(){
+  const v = ($("ckInp").value || "").trim();
+  if(!v) return toast("ใส่รหัสเข้าก๊วนก่อนนะ", true);
+  window.__clubKey = v;
+  const btn = $("ckBtn");
+  if(btn){ btn.disabled = true; btn.textContent = "🕐 กำลังตรวจสอบ…"; }
+  const d = await gasLoad();
+  if(gasOK){
+    lsSet(CLUB_LS, v);
+    toast("ยินดีต้อนรับเข้าก๊วน 🏸");
+    if(lsGet(CLUB_LS) === v){ setTimeout(function(){ location.reload(); }, 400); }
+    else { db = d || db; window.__booting = false; renderLogin(); }   // เครื่องที่ปิด localStorage
+  } else {
+    window.__clubKey = null;
+    if(btn){ btn.disabled = false; btn.textContent = "🔓 เข้าก๊วน"; }
+    toast("รหัสไม่ถูกต้อง หรือเชื่อมต่อไม่ได้ — ลองอีกครั้ง", true);
+  }
+}
+function renderLogin(){
+  const p = $("loginPanel");
+  if(gasUrl() && !clubKey()){
+    p.innerHTML = `
+      <div style="text-align:center; margin-bottom:14px;">
+        <div style="font-size:42px;">🔒</div>
+        <div style="font-family:'Prompt',sans-serif; font-weight:800; font-size:19px;">เฉพาะสมาชิกก๊วน</div>
+        <div class="muted" style="margin-top:4px;">ใส่รหัสเข้าก๊วน — ขอได้จาก Admin หรือในกลุ่ม LINE ของก๊วน<br>(ใส่ครั้งเดียว เครื่องนี้จะจำไว้)</div>
+      </div>
+      <div class="field"><input type="password" id="ckInp" placeholder="รหัสเข้าก๊วน" style="text-align:center; font-size:19px; letter-spacing:2px;" onkeydown="if(event.key==='Enter')submitClubKey()"></div>
+      <button class="btn btn-lime btn-block" id="ckBtn" onclick="submitClubKey()">🔓 เข้าก๊วน</button>`;
+    return;
+  }
+  if(!loginPick){
+    pinBuf=""; pinStage=null;
+    p.innerHTML = `
+      ${nextSessionBanner()}
+      ${window.__booting? '<div class="boot-sync"><span class="spin">🕐</span> <span class="boot-dots">แอปทำงานอยู่ — กำลังซิงก์ข้อมูลล่าสุดจากก๊วน</span></div>':""}
+      <label>แตะชื่อของคุณเพื่อเข้าสู่ระบบ (Admin, ผู้จัดการ, แล้วเรียงตามตัวอักษร)</label>
+      <div class="member-grid">
+        ${memberSort(db.members).map(m=>`
+          <div class="mg-item" onclick="pickLogin('${m.id}')">
+            <div class="em">${m.emoji}</div>
+            <div class="nm">${esc(m.name)}</div>
+            ${m.role==="admin" ? '<div class="rl">ADMIN</div>' : (db.settings.defaultManagerId===m.id?'<div class="rl" style="color:var(--blue);">ผู้จัดการ</div>':'')}
+          </div>`).join("")}
+      </div>
+      <div style="height:12px;"></div>
+      <button class="btn btn-lime btn-block" onclick="openSignup()">🙋 สมาชิกใหม่ — สมัคร & เข้าร่วมก๊วน</button>
+      ${(!(gasUrl()&&gasOK) && !storageOK) ? '<div class="banner-warn" style="margin-top:12px;">⚠️ ยังไม่ได้เชื่อมระบบเก็บข้อมูลกลาง — ข้อมูลจะไม่ถูกแชร์ (ตั้งค่า Google Sheet Sync ได้หลังล็อกอิน)</div>':""}`;
+  } else if(signupMode){
+    p.innerHTML = `
+      <div style="text-align:center; margin-bottom:12px;">
+        <div style="font-size:30px;">🙋</div>
+        <div style="font-family:'Prompt',sans-serif; font-weight:800; font-size:17px;">สมัครสมาชิกใหม่</div>
+        <div class="muted">ใส่ชื่อเล่น เลือกไอคอน แล้วตั้ง PIN — เสร็จแล้วลงชื่อเข้าร่วมนัดตีได้ทันที</div>
+      </div>
+      <div class="field"><label>ชื่อเล่น</label><input type="text" id="suName" placeholder="เช่น เอก, มด, พี่หนุ่ม"></div>
+      <div class="field"><label>ไอคอนประจำตัว</label><div class="emoji-grid" id="suEmoji">${EMOJIS.map(e=>`<div class="emoji-opt ${e===signupEmoji?"sel":""}" onclick="pickSuEmoji('${e}')">${e}</div>`).join("")}</div></div>
+      <button class="btn btn-lime btn-block" onclick="doSignup()">สมัคร & ตั้ง PIN</button>
+      <div style="height:8px;"></div>
+      <button class="btn btn-ghost btn-block" onclick="cancelSignup()">ย้อนกลับ</button>`;
+  } else {
+    const m = mem(loginPick);
+    const first = !m.pin;
+    let title, sub;
+    if(first && pinStage!=="confirm"){ pinStage="set"; title="ตั้งรหัส PIN ครั้งแรก"; sub="ตั้ง PIN 4 หลักสำหรับ "+esc(m.name)+" ใช้ล็อกอินครั้งต่อไป"; }
+    else if(pinStage==="confirm"){ title="ยืนยัน PIN อีกครั้ง"; sub="กรอก PIN เดิมซ้ำเพื่อยืนยัน"; }
+    else { pinStage="enter"; title="กรอกรหัส PIN"; sub="PIN 4 หลักของ "+esc(m.name); }
+    p.innerHTML = `
+      <div style="text-align:center;">
+        <div style="font-size:34px;">${m.emoji}</div>
+        <div style="font-family:'Prompt',sans-serif; font-weight:800; font-size:17px;">${esc(m.name)}</div>
+        <div class="muted" style="margin-top:2px;">${title}</div>
+        <div class="muted" style="font-size:11.5px;">${sub}</div>
+      </div>
+      <div class="pin-dots">${[0,1,2,3].map(i=>`<div class="pin-dot ${i<pinBuf.length?'fill':''}"></div>`).join("")}</div>
+      <div class="pin-pad">
+        ${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="pin-key" onclick="pinKey('${n}')">${n}</button>`).join("")}
+        <button class="pin-key" style="font-size:13px;" onclick="cancelLogin()">ยกเลิก</button>
+        <button class="pin-key" onclick="pinKey('0')">0</button>
+        <button class="pin-key" onclick="pinKey('del')">⌫</button>
+      </div>`;
+  }
+}
+function pickLogin(id){
+  if(window.__booting) return toast("🕐 กำลังซิงก์ข้อมูลล่าสุด รออีกนิดเดียว…");
+  loginPick=id; pinBuf=""; pinStage=null; pinFirst=""; renderLogin();
+}
+function openSignup(){
+  if(window.__booting) return toast("🕐 กำลังซิงก์ข้อมูลล่าสุด รออีกนิดเดียว…");
+  signupMode=true; signupEmoji=EMOJIS[db.members.length % EMOJIS.length]; renderLogin();
+}
+function cancelSignup(){ signupMode=false; renderLogin(); }
+function pickSuEmoji(e){
+  signupEmoji=e;
+  document.querySelectorAll("#suEmoji .emoji-opt").forEach(el=> el.classList.toggle("sel", el.textContent===e));
+}
+async function doSignup(){
+  const name = $("suName").value.trim();
+  if(!name) return toast("กรอกชื่อเล่นก่อนนะ", true);
+  if(db.members.some(m=>m.name.toLowerCase()===name.toLowerCase())) return toast("มีชื่อนี้ในก๊วนแล้ว — ถ้าเป็นคุณ แตะชื่อเพื่อล็อกอินได้เลย", true);
+  const nm = { id:uid(), name, emoji:signupEmoji||"🏸", pin:null, role:"member", baseW:0, baseL:0, selfSignup:true };
+  db.members.push(nm);
+  await storeSave();
+  signupMode=false;
+  toast("ยินดีต้อนรับ "+name+" "+nm.emoji+" — ตั้ง PIN 4 หลักต่อเลย");
+  pickLogin(nm.id);   // เข้าโฟลว์ตั้ง PIN ครั้งแรกทันที
+}
+function cancelLogin(){ loginPick=null; pinBuf=""; pinStage=null; pinFirst=""; renderLogin(); }
+async function pinKey(k){
+  if(k==="del"){ pinBuf = pinBuf.slice(0,-1); renderLogin(); return; }
+  if(pinBuf.length>=4) return;
+  pinBuf += k; renderLogin();
+  if(pinBuf.length<4) return;
+  const m = mem(loginPick);
+  await new Promise(r=>setTimeout(r,120));
+  if(pinStage==="set"){ pinFirst=pinBuf; pinBuf=""; pinStage="confirm"; renderLogin(); return; }
+  if(pinStage==="confirm"){
+    if(pinBuf===pinFirst){
+      m.pin = pinBuf; await storeSave();
+      loginDone();
+    } else { toast("PIN ไม่ตรงกัน ลองใหม่อีกครั้ง", true); pinBuf=""; pinFirst=""; pinStage="set"; renderLogin(); }
+    return;
+  }
+  // enter
+  if(pinBuf===m.pin){ loginDone(); }
+  else { toast("PIN ไม่ถูกต้อง", true); pinBuf=""; renderLogin(); }
+}
+function loginDone(){
+  meId = loginPick; loginPick=null; pinBuf="";
+  lsSet(LOGIN_KEY, meId);   // จำไว้ในเครื่องนี้ จนกว่าจะกด Log-out
+  $("loginView").style.display="none";
+  $("appView").style.display="block";
+  updateSyncBadge();
+  renderAll();
+  toast("สวัสดี "+nameOf(meId)+" "+emojiOf(meId));
+}
+function confirmLogout(){ if(confirm("ออกจากแอป (Log-out) ตอนนี้?\nครั้งถัดไปต้องใส่ PIN ใหม่")) logout(); }
+function logout(){
+  lsDel(LOGIN_KEY);   // ลบการจำล็อกอิน — ครั้งหน้าต้องใส่ PIN
+  meId=null; closeModal();
+  $("appView").style.display="none";
+  $("loginView").style.display="flex";
+  renderLogin();
+}
+
+/* =====================================================
+   NAV / RENDER SHELL
+   ===================================================== */
+function go(v){
+  curView=v;
+  document.querySelectorAll(".bn-item").forEach(b=> b.classList.toggle("on", b.dataset.v===v));
+  document.querySelectorAll(".view").forEach(el=> el.classList.toggle("on", el.id==="v-"+v));
+  renderAll();
+}
+function renderAll(){
+  if(!meId) return;
+  renderMeCap(); renderPlay(); renderMembers(); renderRank(); renderHistory();
+  document.querySelectorAll(".view").forEach(el=> el.classList.toggle("on", el.id==="v-"+curView));
+}
+function renderMeCap(){
+  const m = me(); if(!m) return;
+  const roleTag = m.role==="admin" ? '<span class="tag tag-admin">ADMIN</span>' : (isDefaultMgr()? '<span class="tag tag-mgr">ผู้จัดการ</span>':"");
+  $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="nm">${esc(m.name)}</span>${roleTag}`;
+}
+
+/* =====================================================
+   VIEW: นัดตี  (open → playing → done)
+   ===================================================== */
+function renderPlay(){
+  const v = $("v-play");
+  const s = activeSession();
+  let html = "";
+
+  // 💸 แจ้งเตือนยอดค้างจ่ายของฉัน (ขึ้นบนสุดหน้าของสมาชิกคนนั้นเอง)
+  db.sessions.filter(x=>x.status==="done" && x.attendees.some(a=>a.memberId===meId) && !(x.paid && x.paid[meId]))
+    .sort((a,b)=> b.date.localeCompare(a.date))
+    .forEach(x=>{
+      const req = x.payReq && x.payReq[meId];
+      const nud = !req && x.payNudge && x.payNudge[meId];
+      html += `<div class="banner-due ${nud?"nudged":""}" onclick="openPayment('${x.id}')">
+        ${req? "⏳ <b>รอผู้จัดการอนุมัติ</b>" : nud? `📣 <b>ผู้จัดการ (${esc(nameOf(nud.by))}) เตือน: กรุณาชำระ</b>` : "💸 <b>คุณมียอดค้างจ่าย</b>"} ${money(payAmt(x,meId))} — นัด ${fmtDateShort(x.date)} • <u>แตะเพื่อ${req? "ดูสถานะ":"ชำระเงิน"}</u>
+      </div>`;
+    });
+
+  // 💰 แจ้งเตือนผู้จัดการ/Admin: มีรายการชำระเงินรออนุมัติ
+  const pend = pendingApprovals();
+  if(pend.length){
+    html += `<div class="banner-approve" onclick="openPendingList()">💰 <b>มีการแจ้งชำระเงินรออนุมัติ ${pend.length} รายการ</b> — แตะเพื่อตรวจและกดอนุมัติ</div>`;
+  }
+
+  if(!s){
+    html += `<div class="sess-hero" style="text-align:center;">
+      ${stepper(1)}
+      <div style="font-size:36px;">🏸</div>
+      <div class="sess-date">ยังไม่มีนัดตีที่เปิดอยู่</div>
+      <div class="muted">${canOpenSession() ? "ขั้นที่ 1: กำหนดวันตีและสถานที่ เพื่อเปิดให้สมาชิกลงชื่อล่วงหน้า" : "รอ Admin หรือผู้จัดการเปิดนัดถัดไป"}</div>
+      ${canOpenSession() ? `<button class="btn btn-lime big-join" onclick="openNewSession()">📅 กำหนดวันตี & เปิดนัดใหม่</button>`:""}
+    </div>`;
+  } else if(s.status==="open"){
+    html += renderOpenSession(s);
+  } else {
+    html += renderPlayingSession(s);
+  }
+
+  // เมนูหลัก — ปุ่มใหญ่ 4 ปุ่ม รายละเอียดทั้งหมดเปิดเป็น popup
+  const fbCount = (db.feedback||[]).length;
+  html += `<div class="menu-grid">
+    <button class="menu-btn" onclick="openPastList()"><span class="mi">🏁</span>สรุปนัดที่ผ่านมา</button>
+    <button class="menu-btn" onclick="openPayHistory()"><span class="mi">💰</span>ประวัติการจ่ายเงิน</button>
+    <button class="menu-btn" onclick="openFeedbackMenu()"><span class="mi">💬</span>ความคิดเห็น${isAdmin()&&fbCount? ` (${fbCount})`:""}</button>
+    <button class="menu-btn" onclick="openManageMenu()"><span class="mi">⚙️</span>จัดการก๊วน</button>
+  </div>`;
+  v.innerHTML = html;
+}
+
+/* ---------- popup: สรุปนัดที่ผ่านมา ---------- */
+function openPastList(){
+  const done = db.sessions.filter(x=>x.status==="done").sort((a,b)=> b.date.localeCompare(a.date)).slice(0,8);
+  modal(`
+    <div class="modal-head"><h3>🏁 สรุปนัดที่ผ่านมา</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    ${done.length? done.map(x=>`
+      <button class="btn btn-ghost btn-block" style="margin-bottom:10px; text-align:left; display:flex; justify-content:space-between; align-items:center;" onclick="openSummary('${x.id}')">
+        <span>📊 ${fmtDateShort(x.date)} • ${x.attendees.length} คน</span>
+        <b style="color:var(--lime);">${money(totalCost(x))}</b>
+      </button>`).join("") : '<div class="empty"><div class="big">🏁</div>ยังไม่มีนัดที่จบ</div>'}
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+
+/* ---------- popup: ความคิดเห็น ---------- */
+function openFeedbackMenu(){
+  if(!isAdmin()) return openFeedback();
+  const n = (db.feedback||[]).length;
+  modal(`
+    <div class="modal-head"><h3>💬 ความคิดเห็น</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <button class="btn btn-lime btn-block" onclick="openFeedback()">✍️ ส่งความคิดเห็น</button>
+    <div style="height:10px;"></div>
+    <button class="btn ${n?"btn-blue":"btn-ghost"} btn-block" onclick="openFeedbackList()">📥 กล่องความคิดเห็น (${n})</button>
+    <div style="height:10px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+
+/* ---------- popup: จัดการก๊วน ---------- */
+function openManageMenu(){
+  const dm = mem(db.settings.defaultManagerId);
+  const mgr = isAdmin()||isDefaultMgr();
+  modal(`
+    <div class="modal-head"><h3>⚙️ จัดการก๊วน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">ผู้จัดการ (ค่าเริ่มต้น)</span><b>${dm? dm.emoji+" "+esc(dm.name):"-"}</b></div>
+    <div class="row" style="margin-bottom:12px;"><span class="muted">การเก็บข้อมูล (อัตโนมัติ)</span><b style="font-size:13px;">${syncLabel()}</b></div>
+    ${canOpenSession()? `<button class="btn btn-lime btn-block" onclick="closeModal(); openNewSession();">📅 เปิดนัดตีใหม่ / เพิ่มนัด</button><div style="height:8px;"></div>`:""}
+    ${mgr? `<button class="btn btn-ghost btn-block" onclick="openDelegate()">👑 มอบหมายผู้จัดการ</button><div style="height:8px;"></div>`:""}
+    <button class="btn btn-ghost btn-block" onclick="openSyncInfo()">☁️ การเชื่อมต่อ & ซิงก์</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="exportExcel(false)">📥 บันทึกไฟล์ Excel</button>
+    ${mgr? `
+      <div style="height:8px;"></div>
+      <input type="file" id="xlsxImport" accept=".xlsx" style="display:none;" onchange="importExcel(this)">
+      <button class="btn btn-ghost btn-block" onclick="document.getElementById('xlsxImport').click()">📤 นำเข้าจากไฟล์ Excel</button>`:""}
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+
+/* ---------- สถานะ: เปิดรับลงชื่อ ---------- */
+function renderOpenSession(s){
+  const joined = s.attendees.some(a=>a.memberId===meId);
+  const n = s.attendees.length;
+  const nc = courtsNeeded(n);
+  const mgr = mem(s.managerId);
+  return `
+  <div class="sess-hero">
+    ${stepper(2, s.id)}
+    <div class="row">
+      <span class="tag tag-open">● ขั้นที่ 2: เปิดรับลงชื่อล่วงหน้า</span>
+      ${canManage(s)? `<button class="btn btn-ghost btn-sm" onclick="openEditSession('${s.id}')">แก้ไขนัด</button>`:""}
+    </div>
+    <div class="sess-date">${fmtDate(s.date)}</div>
+    <div class="muted">📍 ${esc(s.loc||"ยังไม่ระบุสถานที่")} • ⏰ ${esc(s.time||"-")} • ผู้จัดการนัด ${mgr? mgr.emoji+" "+esc(mgr.name):"-"}</div>
+
+    <button class="big-join ${joined? 'btn-ghost':'btn-lime'}" onclick="toggleJoin('${s.id}')">
+      ${joined ? "✓ ลงชื่อแล้ว — แตะเพื่อถอนชื่อ" : "🙋 ลงชื่อเข้าร่วมนัดนี้"}
+    </button>
+
+    <div class="statgrid">
+      <div class="statbox"><div class="v" style="color:var(--lime);">${n}</div><div class="l">ลงชื่อแล้ว (คน)</div></div>
+      <div class="statbox"><div class="v">${nc}</div><div class="l">คอร์ทที่ควรจอง</div></div>
+      <div class="statbox"><div class="v">${PLAYERS_PER_COURT}</div><div class="l">คน/คอร์ท</div></div>
+    </div>
+    ${canManage(s) ? `
+      <div class="banner-warn" style="margin-top:12px; margin-bottom:0;">📣 สำหรับผู้จัดการ: ตอนนี้ลงชื่อแล้ว <b>${n} คน</b> → จองคอร์ทล่วงหน้า <b>${nc} คอร์ท</b> ให้เพียงพอ • ข้อมูลคอร์ท (เลขคอร์ท/ชั่วโมง/ราคา) ค่อยกรอกทีหลังตอนถึงวันตี</div>
+      <button class="btn btn-blue big-join" onclick="openStartPlay('${s.id}')">🏟️ ขั้นที่ 3: เปิดคอร์ท & เริ่มตี (ทำเมื่อถึงวันตี)</button>
+    `:""}
+    ${stageBar(s)}
+  </div>
+
+  <div class="card">
+    <h3>🙋 สรุปผู้ลงชื่อเข้าร่วม (${n} คน)</h3>
+    ${n===0 ? `<div class="empty"><div class="big">👀</div>ยังไม่มีใครลงชื่อ — เป็นคนแรกเลย!</div>` :
+      `<div class="chips">${s.attendees.map(a=>{
+        const m = mem(a.memberId); if(!m) return "";
+        return `<span class="chip" style="cursor:default;"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
+      }).join("")}</div>`}
+  </div>`;
+}
+
+/* ---------- สถานะ: กำลังตี ---------- */
+function renderPlayingSession(s){
+  const isAtt = s.attendees.some(a=>a.memberId===meId);
+  const canRecord = isAtt || canManage(s);
+  const st = sessionStats(s);
+  const totalSets = (s.sets||[]).length;
+  const mgr = mem(s.managerId);
+
+  const setList = [...(s.sets||[])].reverse().map(x=>{
+    const w = setWinner(x);
+    const canDel = canManage(s) || x.recordedBy===meId;
+    return `<div class="set-card">
+      <div class="set-teams">
+        <div class="set-team ${w==="A"?"w":""}">${teamLabel(x.teamA)}</div>
+        <div class="set-score">${x.scoreA} : ${x.scoreB}</div>
+        <div class="set-team ${w==="B"?"w":""}">${teamLabel(x.teamB)}</div>
+      </div>
+      <div class="set-meta">คอร์ท ${esc(x.court)} • บันทึกโดย ${emojiOf(x.recordedBy)} ${esc(nameOf(x.recordedBy))} ${x.shuttle?"• 🔄 เปลี่ยนลูก":""}
+        ${canDel? ` <span style="color:var(--coral); cursor:pointer; font-weight:700;" onclick="delSet('${s.id}','${x.id}')">✕ ลบ</span>`:""}
+      </div>
+    </div>`;
+  }).join("") || `<div class="empty"><div class="big">🏸</div>ยังไม่มีเซ็ตที่บันทึก — เริ่มบันทึกเซ็ตแรกกันเลย</div>`;
+
+  const courtRows = (s.courts||[]).map(c=>
+    `<div class="court-line"><span style="font-weight:700;">คอร์ท ${esc(c.no)}</span><span class="muted" style="flex:1;">${c.hours} ชม. × ${money(c.price)}/ชม.</span><b>${money((Number(c.hours)||0)*(Number(c.price)||0))}</b></div>`
+  ).join("");
+
+  return `
+  <div class="sess-hero">
+    ${stepper(3, s.id)}
+    <div class="row">
+      <span class="tag tag-play">● ขั้นที่ 3: กำลังตี</span>
+      ${canManage(s)? `<button class="btn btn-ghost btn-sm" onclick="openStartPlay('${s.id}')">แก้ข้อมูลคอร์ท</button>`:""}
+    </div>
+    <div class="sess-date">${fmtDate(s.date)}</div>
+    <div class="muted">📍 ${esc(s.loc||"-")} • ⏰ ${esc(s.time||"-")} • ผู้จัดการนัด ${mgr? mgr.emoji+" "+esc(mgr.name):"-"}</div>
+    <div class="statgrid">
+      <div class="statbox"><div class="v">${s.attendees.length}</div><div class="l">ผู้เล่น</div></div>
+      <div class="statbox"><div class="v">${(s.courts||[]).length}</div><div class="l">คอร์ท</div></div>
+      <div class="statbox"><div class="v">${totalSets}</div><div class="l">เซ็ตที่ตีแล้ว</div></div>
+    </div>
+    ${canManage(s)? `<button class="btn btn-lime big-join" onclick="finishSession('${s.id}')">🏁 ขั้นที่ 4: สรุปผล — จบนัดนี้</button>`
+      : `<div class="muted" style="margin-top:12px; text-align:center;">ผู้จัดการนัดจะเป็นคนกด "สรุปผล" เมื่อเลิกตี</div>`}
+    ${stageBar(s)}
+  </div>
+
+  <div class="card">
+    <h3>🏟️ ข้อมูลคอร์ท</h3>
+    ${courtRows || '<div class="muted">ยังไม่กรอกข้อมูลคอร์ท</div>'}
+    <div class="divider"></div>
+    <div class="row"><span class="muted">ค่าลูกขนไก่</span><span>${s.shuttlesUsed||0} ลูก × ${money(s.shuttlePrice||0)} = <b>${money(shuttleCost(s))}</b></span></div>
+  </div>
+
+  <div class="card">
+    <h3>✍️ บันทึกเซ็ต <span class="muted" style="font-weight:400;">(สมาชิกที่มาตีช่วยกันบันทึกได้)</span></h3>
+    ${canRecord ? renderSetForm(s) : `<div class="muted">เฉพาะผู้ที่ลงชื่อเข้าร่วมนัดนี้จึงบันทึกผลได้</div>`}
+  </div>
+
+  <div class="card">
+    <h3>📜 เซ็ตทั้งหมด (${totalSets})</h3>
+    ${setList}
+  </div>`;
+}
+
+function renderSetForm(s){
+  const chipRow = (team) => s.attendees.map(a=>{
+    const m = mem(a.memberId); if(!m) return "";
+    const arr = team==="A"? setDraft.teamA : setDraft.teamB;
+    const cls = arr.includes(m.id) ? (team==="A"?"pa":"pb") : "";
+    return `<span class="chip ${cls}" onclick="pickSetTeam('${team}','${m.id}')"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
+  }).join("");
+  const courtOpts = (s.courts||[]).map(c=>`<option value="${esc(c.no)}" ${String(setDraft.court)===String(c.no)?"selected":""}>คอร์ท ${esc(c.no)}</option>`).join("");
+  return `
+    <div class="field"><label>คอร์ทที่เล่น</label><select onchange="setDraft.court=this.value">${courtOpts||'<option value="">-</option>'}</select></div>
+    <div class="field"><label>ทีม A — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("A")}</div></div>
+    <div class="field"><label>ทีม B — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("B")}</div></div>
+    <div class="frow">
+      <div class="field"><label>คะแนนทีม A</label><input type="number" min="0" max="99" value="${setDraft.scoreA}" oninput="setDraft.scoreA=this.value"></div>
+      <div class="field"><label>คะแนนทีม B</label><input type="number" min="0" max="99" value="${setDraft.scoreB}" oninput="setDraft.scoreB=this.value"></div>
+    </div>
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="shChk" style="width:auto;" ${setDraft.shuttle?"checked":""} onchange="setDraft.shuttle=this.checked">
+      <label for="shChk" style="margin:0;">เปลี่ยนลูกขนไก่ในเซ็ตนี้</label>
+    </div>
+    <button class="btn btn-lime btn-block" onclick="addSet('${s.id}')">+ บันทึกเซ็ตนี้</button>`;
+}
+
+function pickSetTeam(team, id){
+  const mine = team==="A"? setDraft.teamA : setDraft.teamB;
+  const other = team==="A"? setDraft.teamB : setDraft.teamA;
+  const oi = other.indexOf(id); if(oi>=0) other.splice(oi,1);
+  const i = mine.indexOf(id);
+  if(i>=0) mine.splice(i,1);
+  else if(mine.length<2) mine.push(id);
+  else { toast("ทีมละไม่เกิน 2 คน", true); return; }
+  renderAll();
+}
+async function addSet(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const d = setDraft;
+  if(d.teamA.length===0 || d.teamB.length===0) return toast("เลือกผู้เล่นทั้งสองทีมก่อน", true);
+  if(d.scoreA==="" || d.scoreB==="") return toast("กรอกคะแนนให้ครบทั้งสองทีม", true);
+  if(Number(d.scoreA)===Number(d.scoreB)) return toast("คะแนนเท่ากันไม่ได้ ต้องมีทีมชนะ", true);
+  s.sets.push({ id:uid(), court:d.court||((s.courts[0]||{}).no||"-"), teamA:[...d.teamA], teamB:[...d.teamB],
+    scoreA:Number(d.scoreA), scoreB:Number(d.scoreB), shuttle:!!d.shuttle, recordedBy:meId, at:Date.now() });
+  if(d.shuttle) s.shuttlesUsed = (Number(s.shuttlesUsed)||0) + 1;
+  await storeSave();
+  setDraft = { court:d.court, teamA:[], teamB:[], scoreA:"", scoreB:"", shuttle:false };
+  renderAll(); toast("บันทึกเซ็ตแล้ว 🏸");
+}
+async function delSet(sid, setId){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const st = s.sets.find(x=>x.id===setId);
+  if(!(canManage(s) || (st && st.recordedBy===meId))) return toast("ไม่มีสิทธิ์ลบเซ็ตนี้", true);
+  if(!confirm("ลบเซ็ตนี้?")) return;
+  if(st && st.shuttle && (Number(s.shuttlesUsed)||0)>0) s.shuttlesUsed = Number(s.shuttlesUsed)-1;
+  s.sets = s.sets.filter(x=>x.id!==setId);
+  await storeSave(); renderAll();
+}
+
+/* ---------- แถบปุ่มประจำขั้นตอน: ย้อนกลับ / บันทึก / แก้ไข ---------- */
+function stageBar(s){
+  const mg = canManage(s);
+  const editFn = s.status==="open" ? `openEditSession('${s.id}')` : `openStartPlay('${s.id}')`;
+  return `<div class="frow" style="margin-top:12px;">
+    ${mg? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="stepBack('${s.id}')">◀️ ย้อนกลับ</button>`:""}
+    <button class="btn btn-blue btn-sm" style="flex:1;" onclick="manualSave()">💾 บันทึก</button>
+    ${mg? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="${editFn}">✏️ แก้ไข</button>`:""}
+  </div>`;
+}
+async function manualSave(){
+  await storeSave(); renderAll();
+  if(!(gasUrl() && !gasOK)) toast("💾 บันทึกและซิงก์ข้อมูลแล้ว");
+}
+async function stepBack(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(s.status==="playing"){
+    if(!confirm("ย้อนกลับไปขั้นที่ 2 (เปิดรับลงชื่อ)?\nข้อมูลคอร์ทและเซ็ตที่บันทึกไว้ยังอยู่ครบ")) return;
+    s.status="open"; await storeSave(); renderAll(); toast("◀️ กลับสู่ขั้นเปิดรับลงชื่อแล้ว");
+  } else if(s.status==="open"){
+    if(!confirm("ย้อนกลับจากขั้นนี้ = ยกเลิกนัดนี้ทั้งหมด\nยืนยันยกเลิกนัด?")) return;
+    db.sessions = db.sessions.filter(x=>x.id!==sid);
+    await storeSave(); renderAll(); toast("ยกเลิกนัดแล้ว");
+  }
+}
+async function reopenSession(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!confirm("เปิดนัดนี้กลับเป็นสถานะ \"กำลังตี\" เพื่อแก้ไขข้อมูล?")) return;
+  s.status="playing"; await storeSave(); closeModal(); go("play"); toast("↩️ เปิดนัดกลับมาแก้ไขได้แล้ว");
+}
+
+/* ---------- join / leave ---------- */
+async function toggleJoin(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || s.status!=="open") return;
+  const i = s.attendees.findIndex(a=>a.memberId===meId);
+  if(i>=0){
+    if(!confirm("ยืนยันถอนชื่อออกจากนัดวันที่ "+fmtDateShort(s.date)+"?")) return;
+    s.attendees.splice(i,1); toast("ถอนชื่อออกจากนัดแล้ว");
+  }
+  else { s.attendees.push({ memberId:meId, hours:2, joinedAt:Date.now() }); toast("ลงชื่อเข้าร่วมแล้ว 🙌"); }
+  await storeSave(); renderAll();
+}
+
+/* ---------- create / edit session ---------- */
+function openNewSession(){
+  if(!canOpenSession()) return toast("เฉพาะ Admin หรือผู้จัดการที่เปิดนัดได้", true);
+  const today = new Date(); today.setMinutes(today.getMinutes()-today.getTimezoneOffset());
+  const opts = db.members.map(m=>`<option value="${m.id}" ${m.id===db.settings.defaultManagerId?"selected":""}>${m.emoji} ${esc(m.name)}${m.id===db.settings.defaultManagerId?" (ค่าเริ่มต้น)":""}</option>`).join("");
+  modal(`
+    <div class="modal-head"><h3>📅 ขั้นที่ 1: กำหนดวันตี & เปิดนัด</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">กำหนดแค่วัน สถานที่ และเวลา — ยังไม่ต้องมีข้อมูลคอร์ท รอดูยอดคนลงชื่อก่อนแล้วค่อยจองคอร์ทให้พอดี</p>
+    <div class="field"><label>วันที่ตี</label><input type="date" id="nsDate" value="${today.toISOString().slice(0,10)}"></div>
+    <div class="field"><label>สถานที่</label><input type="text" id="nsLoc" placeholder="เช่น ยิม4 มธ." value="ยิม4 มธ."></div>
+    <div class="frow">
+      <div class="field"><label>ช่วงเวลา</label><input type="text" id="nsTime" placeholder="เช่น 18.00-20.00" value="18.00-20.00"></div>
+      <div class="field"><label>ผู้จัดการนัดนี้</label><select id="nsMgr">${opts}</select></div>
+    </div>
+    <button class="btn btn-lime btn-block" onclick="createSession()">💾 บันทึก — เปิดนัดให้สมาชิกลงชื่อ</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+async function createSession(){
+  const date = $("nsDate").value;
+  if(!date) return toast("เลือกวันที่ก่อน", true);
+  db.sessions.push({
+    id:uid(), date, loc:$("nsLoc").value.trim(), time:$("nsTime").value.trim(),
+    managerId:$("nsMgr").value, status:"open",
+    attendees:[], courts:[], sets:[],
+    shuttlePrice:DEFAULT_SHUTTLE_PRICE, shuttlesUsed:0, costMode:"equal", paid:{}, createdBy:meId
+  });
+  await storeSave(); closeModal(); renderAll();
+  toast("เปิดนัดแล้ว 📣 บอกเพื่อนๆ มาลงชื่อได้เลย");
+}
+function openEditSession(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  const opts = db.members.map(m=>`<option value="${m.id}" ${m.id===s.managerId?"selected":""}>${m.emoji} ${esc(m.name)}</option>`).join("");
+  modal(`
+    <div class="modal-head"><h3>แก้ไขนัดตี</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>วันที่ตี</label><input type="date" id="esDate" value="${esc(s.date)}"></div>
+    <div class="field"><label>สถานที่</label><input type="text" id="esLoc" value="${esc(s.loc)}"></div>
+    <div class="frow">
+      <div class="field"><label>ช่วงเวลา</label><input type="text" id="esTime" value="${esc(s.time)}"></div>
+      <div class="field"><label>ผู้จัดการนัดนี้ (มอบหมายแทนได้)</label><select id="esMgr">${opts}</select></div>
+    </div>
+    <button class="btn btn-lime btn-block" onclick="saveEditSession('${s.id}')">💾 บันทึก</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ (ไม่บันทึก)</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-danger btn-block" onclick="deleteSession('${s.id}')">ลบนัดนี้ทั้งหมด</button>`);
+}
+async function saveEditSession(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  s.date=$("esDate").value||s.date; s.loc=$("esLoc").value.trim(); s.time=$("esTime").value.trim(); s.managerId=$("esMgr").value;
+  await storeSave(); closeModal(); renderAll(); toast("บันทึกแล้ว");
+}
+async function deleteSession(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!confirm("ลบนัดนี้และข้อมูลทั้งหมดของนัด?")) return;
+  db.sessions = db.sessions.filter(x=>x.id!==sid);
+  await storeSave(); closeModal(); renderAll();
+}
+
+/* ---------- Google Sheet sync setup ---------- */
+function openGasSetup(){
+  if(!(isAdmin()||isDefaultMgr())) return;
+  modal(`
+    <div class="modal-head"><h3>☁️ Google Sheet Sync</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">เมื่อเชื่อมต่อแล้ว ทุกการแก้ไขจะถูกบันทึกลง Google Sheet "smashbadminton-data" ใน Google Drive อัตโนมัติ และสมาชิกทุกคนเห็นข้อมูลเดียวกัน<br><br>
+    ทำครั้งเดียว: เปิด Google Sheet → ส่วนขยาย → Apps Script → วางโค้ดจากไฟล์ <b>google-apps-script-Code.gs</b> → Deploy เป็น Web app (Execute as: Me, Access: Anyone) → คัดลอก URL มาวางด้านล่าง (ขั้นตอนละเอียดอยู่ใน README)</p>
+    <div class="field"><label>Web App URL (ลงท้ายด้วย /exec)</label><input type="text" id="gasInp" value="${esc(gasUrl())}" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <button class="btn btn-lime btn-block" onclick="saveGas()">เชื่อมต่อ & บันทึก</button>
+    ${gasUrl()? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="$('gasInp').value=''; saveGas();">ยกเลิกการเชื่อมต่อ</button>`:""}`);
+}
+async function saveGas(){
+  const url = $("gasInp").value.trim();
+  if(url && !/^https:\/\/script\.google(usercontent)?\.com\//.test(url))
+    return toast("URL ต้องขึ้นต้นด้วย https://script.google.com/", true);
+  window.__gasOverride = url || null;
+  if(!db.settings) db.settings = {};
+  db.settings.gasUrl = url;
+  if(url){
+    toast("กำลังทดสอบการเชื่อมต่อ…");
+    const remote = await gasLoad();
+    if(!gasOK){
+      toast("เชื่อมต่อไม่สำเร็จ — ตรวจว่า Deploy แบบ \"Anyone\" และใช้ URL ที่ลงท้ายด้วย /exec", true);
+    } else if(remote && (remote.rev||0) > (db.rev||0)){
+      remote.settings = remote.settings || {};
+      remote.settings.gasUrl = url;
+      db = remote;   // ชีตมีข้อมูลใหม่กว่า — ใช้ของชีตเป็นหลัก
+    }
+  } else { gasOK = false; }
+  await storeSave(); closeModal(); renderAll();
+  if(url && gasOK) toast("☁️ เชื่อมต่อ Google Sheet สำเร็จ! ข้อมูลจะซิงก์อัตโนมัติ");
+  if(!url) toast("ยกเลิกการเชื่อมต่อ Google Sheet แล้ว");
+}
+
+/* ---------- ความคิดเห็นถึง Admin ---------- */
+function openFeedback(){
+  modal(`
+    <div class="modal-head"><h3>💬 ส่งความคิดเห็นถึง Admin</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">ข้อเสนอแนะการใช้งาน สิ่งที่อยากให้แก้ไข หรือไอเดียพัฒนา App — ส่งตรงถึง Nu (Admin)</p>
+    <div class="field"><label>ข้อความของคุณ</label><textarea id="fbText" rows="4" placeholder="เช่น อยากให้เพิ่ม... / เจอปัญหาตรงที่..."></textarea></div>
+    <button class="btn btn-lime btn-block" onclick="sendFeedback()">📨 ส่งถึง Admin</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+async function sendFeedback(){
+  const t = $("fbText").value.trim();
+  if(!t) return toast("พิมพ์ข้อความก่อนนะ", true);
+  if(!db.feedback) db.feedback = [];
+  db.feedback.push({ id:uid(), from:meId, text:t, at:Date.now() });
+  await storeSave(); closeModal(); renderAll();
+  toast("📨 ส่งความคิดเห็นถึง Admin แล้ว ขอบคุณครับ 🙏");
+}
+function openFeedbackList(){
+  if(!isAdmin()) return;
+  const list = [...(db.feedback||[])].sort((a,b)=> (b.at||0)-(a.at||0));
+  const rows = list.map(f=>`
+    <div class="set-card">
+      <div style="font-size:13.5px;">${esc(f.text)}</div>
+      <div class="set-meta" style="text-align:left; display:flex; justify-content:space-between; align-items:center;">
+        <span>${emojiOf(f.from)} ${esc(nameOf(f.from))} • ${f.at? new Date(f.at).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</span>
+        <span style="color:var(--coral); cursor:pointer; font-weight:700;" onclick="delFeedback('${f.id}')">✕ ลบ</span>
+      </div>
+    </div>`).join("");
+  modal(`
+    <div class="modal-head"><h3>📥 กล่องความคิดเห็น (${list.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    ${rows || '<div class="empty"><div class="big">📭</div>ยังไม่มีความคิดเห็นเข้ามา</div>'}
+    <div style="height:12px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+async function delFeedback(id){
+  if(!isAdmin()) return;
+  if(!confirm("ลบความคิดเห็นนี้?")) return;
+  db.feedback = (db.feedback||[]).filter(f=>f.id!==id);
+  await storeSave(); openFeedbackList(); renderAll();
+}
+
+/* ---------- delegate default manager ---------- */
+function openDelegate(){
+  if(!(isAdmin()||isDefaultMgr())) return;
+  const opts = db.members.map(m=>`<option value="${m.id}" ${m.id===db.settings.defaultManagerId?"selected":""}>${m.emoji} ${esc(m.name)}</option>`).join("");
+  modal(`
+    <div class="modal-head"><h3>มอบหมายผู้จัดการนัดตี</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">ผู้จัดการ (ค่าเริ่มต้น) คือคนที่เปิดนัด จองคอร์ท กรอกข้อมูลคอร์ท และกดสรุปผลได้ — ค่าเริ่มต้นคือ Nu และมอบหมายให้คนอื่นแทนได้</p>
+    <div class="field"><label>เลือกผู้จัดการ</label><select id="dgSel">${opts}</select></div>
+    <button class="btn btn-lime btn-block" onclick="saveDelegate()">บันทึก</button>`);
+}
+async function saveDelegate(){
+  db.settings.defaultManagerId = $("dgSel").value;
+  await storeSave(); closeModal(); renderAll();
+  toast("มอบหมายให้ "+nameOf(db.settings.defaultManagerId)+" เป็นผู้จัดการแล้ว");
+}
+
+/* ---------- start play: กรอกข้อมูลคอร์ท ---------- */
+function openStartPlay(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  const nc = Math.max(1, courtsNeeded(s.attendees.length));
+  const courts = (s.courts&&s.courts.length)? s.courts : Array.from({length:nc},(_,i)=>({no:String(i+1), hours:2, price:DEFAULT_COURT_PRICE}));
+  window.__courtDraft = courts.map(c=>({...c}));
+  modal(`
+    <div class="modal-head"><h3>🏟️ ขั้นที่ 3: เปิดคอร์ท & เริ่มตี</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">ผู้เล่น ${s.attendees.length} คน → แนะนำ ${courtsNeeded(s.attendees.length)} คอร์ท (${PLAYERS_PER_COURT} คน/คอร์ท)</p>
+    <div id="courtDraftList"></div>
+    <button class="btn btn-ghost btn-sm btn-block" onclick="addCourtDraft()">+ เพิ่มคอร์ท</button>
+    <div class="divider"></div>
+    <div class="frow">
+      <div class="field"><label>ราคาลูกขนไก่ / ลูก</label><input type="number" id="spPrice" value="${s.shuttlePrice!=null? s.shuttlePrice : DEFAULT_SHUTTLE_PRICE}"></div>
+      <div class="field"><label>จำนวนลูกที่ใช้ (เพิ่มอัตโนมัติเมื่อติ๊ก "เปลี่ยนลูก")</label><input type="number" id="spUsed" value="${s.shuttlesUsed||0}"></div>
+    </div>
+    <button class="btn btn-blue btn-block" onclick="saveStartPlay('${s.id}')">${s.status==="open"? "💾 บันทึก & เริ่มตี!":"💾 บันทึกข้อมูลคอร์ท"}</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ (ไม่บันทึก)</button>`);
+  renderCourtDraft();
+}
+function renderCourtDraft(){
+  const el = $("courtDraftList"); if(!el) return;
+  el.innerHTML = window.__courtDraft.map((c,i)=>`
+    <div class="frow" style="align-items:flex-end;">
+      <div class="field" style="flex:.8;"><label>คอร์ทที่</label><input type="text" value="${esc(c.no)}" oninput="__courtDraft[${i}].no=this.value"></div>
+      <div class="field"><label>ชั่วโมง</label><input type="number" step="0.5" value="${c.hours}" oninput="__courtDraft[${i}].hours=this.value"></div>
+      <div class="field"><label>ราคา/ชม. (฿)</label><input type="number" value="${c.price}" oninput="__courtDraft[${i}].price=this.value"></div>
+      <div class="field" style="flex:.4;"><button class="btn btn-danger btn-sm btn-block" onclick="rmCourtDraft(${i})">✕</button></div>
+    </div>`).join("");
+}
+function addCourtDraft(){ window.__courtDraft.push({no:String(window.__courtDraft.length+1), hours:2, price:DEFAULT_COURT_PRICE}); renderCourtDraft(); }
+function rmCourtDraft(i){ window.__courtDraft.splice(i,1); renderCourtDraft(); }
+async function saveStartPlay(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const courts = window.__courtDraft.filter(c=>String(c.no).trim()!=="");
+  if(courts.length===0) return toast("ใส่ข้อมูลอย่างน้อย 1 คอร์ท", true);
+  s.courts = courts.map(c=>({no:String(c.no).trim(), hours:Number(c.hours)||0, price:Number(c.price)||0}));
+  s.shuttlePrice = Number($("spPrice").value)||0;
+  s.shuttlesUsed = Number($("spUsed").value)||0;
+  const starting = s.status==="open";
+  if(s.status!=="done") s.status = "playing";   // นัดที่จบแล้ว: แก้ตัวเลขได้โดยไม่เปลี่ยนสถานะ
+  await storeSave(); closeModal(); renderAll();
+  if(s.status==="done") openPayment(sid);
+  toast(starting? "เริ่มตีได้เลย! ช่วยกันบันทึกเซ็ตนะ 🏸":"บันทึกตัวเลขค่าใช้จ่ายแล้ว");
+}
+
+/* ---------- finish: สรุปผล ---------- */
+async function finishSession(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!confirm("จบนัดนี้และไปหน้าสรุปผล?")) return;
+  s.status = "done"; s.finishedAt = Date.now();
+  await storeSave(); renderAll();
+  exportExcel(true);   // บันทึกลงไฟล์ Excel อัตโนมัติเมื่อสรุปผล
+  openSummary(sid);
+}
+
+/* =====================================================
+   EXCEL SYNC (ไฟล์ Excel คู่แอป)
+   - Export: สร้าง smashbadminton-data.xlsx (อัตโนมัติเมื่อกดสรุปผล + กดเองได้)
+   - Import: อ่านชีต AppData กลับเข้าแอปแบบครบถ้วน
+   ===================================================== */
+const XLSX_FILE = "smashbadminton-data.xlsx";
+const APPDATA_MARK = "SMASH-APP-DATA-V1";
+const STATUS_TH = { open:"เปิดรับลงชื่อ", playing:"กำลังตี", done:"จบแล้ว" };
+
+function xlsxReady(){ return typeof XLSX !== "undefined"; }
+
+function buildWorkbook(){
+  const wb = XLSX.utils.book_new();
+
+  /* --- อ่านก่อน --- */
+  const info = [
+    ["🏸 Smash Badminton Club — ไฟล์ข้อมูลคู่แอป"],
+    [""],
+    ["ไฟล์นี้ถูกสร้างโดยแอป smashbadminton-app.html โดยอัตโนมัติ"],
+    ["ชีต Member / Sessions / Sets / Cost มีไว้เปิดดูใน Excel (สร้างจากข้อมูลจริงในแอป)"],
+    ["ชีต AppData คือข้อมูลดิบของแอป — ห้ามแก้ไข มิฉะนั้นจะนำข้อมูลกลับเข้าแอปไม่ได้"],
+    ["วิธีนำข้อมูลกลับเข้าแอป: เปิดแอป → แท็บนัดตี → การจัดการก๊วน → นำเข้าข้อมูลจาก Excel"],
+    [""],
+    ["ส่งออกเมื่อ", new Date().toLocaleString("th-TH")]
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(info), "อ่านก่อน");
+
+  /* --- Member (โครงเดียวกับไฟล์ Excel เดิม) --- */
+  const cs = careerStats();
+  const ranked = [...cs].filter(x=>x.sets>0).sort((a,b)=> b.wr-a.wr || b.w-a.w);
+  const memRows = [["Code","Member","Win","Lose","Win Rate","Rank"]];
+  db.members.forEach(m=>{
+    const c = cs.find(x=>x.id===m.id) || {w:0,l:0,sets:0,wr:null};
+    const rk = ranked.findIndex(x=>x.id===m.id);
+    memRows.push([m.id, m.name, c.w, c.l, c.sets>0? Math.round(c.wr*1000)/1000 : "", rk>=0? rk+1 : ""]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(memRows), "Member");
+
+  /* --- Sessions --- */
+  const sesRows = [["วันที่","สถานที่","เวลา","ผู้จัดการ","สถานะ","จำนวนคน","จำนวนเซ็ต","ลูกที่ใช้","ค่าคอร์ท (฿)","ค่าลูก (฿)","รวมทั้งหมด (฿)","วิธีหาร"]];
+  [...db.sessions].sort((a,b)=> a.date.localeCompare(b.date)).forEach(s=>{
+    sesRows.push([s.date, s.loc||"", s.time||"", nameOf(s.managerId), STATUS_TH[s.status]||s.status,
+      s.attendees.length, (s.sets||[]).length, s.shuttlesUsed||0,
+      courtCost(s), shuttleCost(s), totalCost(s), s.costMode==="hours"?"ตามชั่วโมงเล่น":"หารเท่ากัน"]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sesRows), "Sessions");
+
+  /* --- Sets --- */
+  const setRows = [["วันที่","คอร์ท","ทีม A","คะแนน A","ทีม B","คะแนน B","ผู้ชนะ","เปลี่ยนลูก","ผู้บันทึก"]];
+  [...db.sessions].sort((a,b)=> a.date.localeCompare(b.date)).forEach(s=>{
+    (s.sets||[]).forEach(x=>{
+      const w = setWinner(x);
+      setRows.push([s.date, x.court, x.teamA.map(nameOf).join(" + "), x.scoreA,
+        x.teamB.map(nameOf).join(" + "), x.scoreB,
+        w? (w==="A"? x.teamA : x.teamB).map(nameOf).join(" + ") : "-",
+        x.shuttle? "ใช่":"", nameOf(x.recordedBy)]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(setRows), "Sets");
+
+  /* --- Cost --- */
+  const costRows = [["วันที่","สมาชิก","ชั่วโมงเล่น","ยอดที่ต้องจ่าย (฿)","จ่ายแล้ว"]];
+  [...db.sessions].sort((a,b)=> a.date.localeCompare(b.date)).forEach(s=>{
+    const split = costSplit(s);
+    s.attendees.forEach(a=>{
+      costRows.push([s.date, nameOf(a.memberId), a.hours||"", Math.round((split[a.memberId]||0)*100)/100,
+        (s.paid && s.paid[a.memberId])? "✓":""]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(costRows), "Cost");
+
+  /* --- AppData (ข้อมูลดิบสำหรับนำกลับเข้าแอป) --- */
+  const json = JSON.stringify(db);
+  const chunks = [];
+  for(let i=0; i<json.length; i+=30000) chunks.push([json.slice(i, i+30000)]);
+  const appRows = [[APPDATA_MARK], ["ห้ามแก้ไขชีตนี้ — ใช้สำหรับนำข้อมูลกลับเข้าแอป"], ...chunks];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(appRows), "AppData");
+
+  return wb;
+}
+
+function exportExcel(auto){
+  if(!xlsxReady()){ toast("โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ — ต้องเชื่อมต่ออินเทอร์เน็ต", true); return; }
+  try{
+    XLSX.writeFile(buildWorkbook(), XLSX_FILE);
+    toast(auto? "📥 บันทึกลงไฟล์ Excel อัตโนมัติแล้ว (เช็คโฟลเดอร์ดาวน์โหลด)" : "📥 บันทึกไฟล์ Excel แล้ว");
+  }catch(e){
+    if(!auto) toast("บันทึก Excel ไม่สำเร็จ: "+e.message, true);
+  }
+}
+
+async function importExcel(input){
+  const f = input.files && input.files[0];
+  input.value = "";
+  if(!f) return;
+  if(!(isAdmin()||isDefaultMgr())) return toast("เฉพาะ Admin หรือผู้จัดการที่นำเข้าข้อมูลได้", true);
+  if(!xlsxReady()) return toast("โหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ — ต้องเชื่อมต่ออินเทอร์เน็ต", true);
+  try{
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf);
+    const ws = wb.Sheets["AppData"];
+    if(!ws) return toast("ไฟล์นี้ไม่มีชีต AppData — ต้องเป็นไฟล์ที่แอปนี้บันทึกไว้", true);
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1});
+    if(!rows.length || String(rows[0][0])!==APPDATA_MARK) return toast("รูปแบบชีต AppData ไม่ถูกต้อง", true);
+    const json = rows.slice(2).map(r=> r[0]==null? "" : String(r[0])).join("");
+    const parsed = JSON.parse(json);
+    if(!Array.isArray(parsed.members) || !Array.isArray(parsed.sessions)) return toast("ข้อมูลในไฟล์ไม่สมบูรณ์", true);
+    if(!confirm("นำเข้าข้อมูลจาก Excel?\nข้อมูลปัจจุบันในแอปจะถูกแทนที่ด้วยข้อมูลในไฟล์\n(สมาชิก "+parsed.members.length+" คน, นัด "+parsed.sessions.length+" นัด)")) return;
+    parsed.rev = Math.max(parsed.rev||0, (db.rev||0)) ;
+    db = parsed;
+    if(!db.settings) db.settings = {};
+    await storeSave();
+    if(meId && !mem(meId)){ toast("นำเข้าสำเร็จ — บัญชีที่ล็อกอินไม่อยู่ในข้อมูลใหม่ กรุณาล็อกอินอีกครั้ง"); logout(); return; }
+    renderAll();
+    toast("📤 นำเข้าข้อมูลจาก Excel สำเร็จ");
+  }catch(e){ toast("นำเข้าไม่สำเร็จ: "+e.message, true); }
+}
+
+/* =====================================================
+   SUMMARY (สรุปผล: สถิติ + ค่าใช้จ่าย)
+   ===================================================== */
+function openSummary(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  histOpen = sid;
+  modal(renderSummaryHtml(s));
+}
+function renderSummaryHtml(s){
+  const st = sessionStats(s);
+  const mvps = sessionMVP(s);
+  const canMg = canManage(s);
+
+  const statRows = s.attendees.map(a=>{
+    const m = mem(a.memberId); if(!m) return "";
+    const v = st[a.memberId]||{w:0,l:0,sets:0};
+    const wr = v.sets>0 ? Math.round(v.w/v.sets*100) : null;
+    return `<tr style="cursor:pointer;" onclick="openPlayerStats('${a.memberId}')">
+      <td>${m.emoji} ${esc(m.name)} ${mvps.includes(m.id)?"⭐":""} <span class="muted" style="font-size:11px;">👁️</span></td>
+      <td style="text-align:center;">${v.sets}</td>
+      <td style="text-align:center; color:var(--lime); font-weight:700;">${v.w}</td>
+      <td style="text-align:center; color:var(--coral);">${v.l}</td>
+      <td style="text-align:center;">${wr===null?"-":wr+"%"}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+    <div class="modal-head"><h3>📊 สรุปผลนัด ${fmtDateShort(s.date)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:-6px;">📍 ${esc(s.loc||"-")} • ⏰ ${esc(s.time||"-")} • ผู้จัดการ ${emojiOf(s.managerId)} ${esc(nameOf(s.managerId))}</p>
+
+    ${mvps.length? `<div class="mvp-band"><span style="font-size:28px;">⭐</span><div>
+      <div style="font-weight:800; font-family:'Prompt',sans-serif; font-size:16px;">MVP ประจำนัด</div>
+      <div class="muted">${mvps.map(id=>emojiOf(id)+" "+esc(nameOf(id))).join(", ")}</div>
+    </div></div>`:""}
+
+    <div class="statgrid" style="margin:0 0 12px;">
+      <div class="statbox"><div class="v">${s.attendees.length}</div><div class="l">ผู้เล่น</div></div>
+      <div class="statbox"><div class="v">${(s.sets||[]).length}</div><div class="l">เซ็ตทั้งหมด</div></div>
+      <div class="statbox"><div class="v">${s.shuttlesUsed||0}</div><div class="l">ลูกที่ใช้</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px;">
+      <h3>📊 สถิติรายคน</h3>
+      <table class="tbl">
+        <tr><th>ผู้เล่น</th><th style="text-align:center;">เซ็ต</th><th style="text-align:center;">ชนะ</th><th style="text-align:center;">แพ้</th><th style="text-align:center;">Win%</th></tr>
+        ${statRows || '<tr><td colspan="5" class="muted">ไม่มีข้อมูล</td></tr>'}
+      </table>
+    </div>
+
+    <button class="btn btn-lime btn-block" onclick="openPayment('${s.id}')">💰 หน้าการจ่ายเงิน — รวม ${money(totalCost(s))}</button>
+    <div style="height:8px;"></div>
+    <div class="frow">
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="closeModal()">◀️ ย้อนกลับ</button>
+      ${canMg? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="reopenSession('${s.id}')">✏️ แก้ไข (เปิดนัดกลับ)</button>`:""}
+    </div>`;
+}
+
+/* ---------- หน้าการจ่ายเงิน (แยกจากสรุปผล) ---------- */
+function openPayment(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  histOpen = sid;
+  modal(renderPaymentHtml(s));
+}
+function renderPaymentHtml(s){
+  const split = costSplit(s);
+  const total = totalCost(s);
+  const canMg = canManage(s);
+
+  const costRows = s.attendees.map(a=>{
+    const m = mem(a.memberId); if(!m) return "";
+    const mid = a.memberId;
+    const amt = split[mid]||0;
+    const paid = !!(s.paid && s.paid[mid]);
+    const req = s.payReq && s.payReq[mid];
+    const info = s.payInfo && s.payInfo[mid];
+    let st;
+    if(paid){
+      st = `<span class="tag tag-paid" ${canMg?`onclick="togglePaid('${s.id}','${mid}')"`:'style="cursor:default;"'}>จ่ายแล้ว ✓${info? (info.method==="cash"?" 💵": info.method==="slip"?" 🧾":""):""}</span>`;
+      if(info && info.slip) st += ` <span style="cursor:pointer;" title="ดูสลิป" onclick="viewSlip('${s.id}','${mid}')">👁️</span>`;
+    } else if(req){
+      st = `<span class="tag tag-pending" style="cursor:pointer;" onclick="openPayReview('${s.id}','${mid}')">⏳ รออนุมัติ ${req.method==="cash"?"💵":"🧾"}</span>`;
+    } else {
+      const nudged = s.payNudge && s.payNudge[mid];
+      st = `<span class="tag tag-unpaid" ${canMg?`onclick="openUnpaidAction('${s.id}','${mid}')"`:'style="cursor:default;"'}>ยังไม่จ่าย${nudged?" 📣":""}</span>`;
+    }
+    return `<tr>
+      <td>${m.emoji} ${esc(m.name)} ${s.costMode==="hours"?`<span class="muted">(${a.hours} ชม.)</span>`:""}</td>
+      <td style="text-align:right; font-weight:700;">${money(amt)}</td>
+      <td style="text-align:right;">${st}</td>
+    </tr>`;
+  }).join("");
+
+  // กล่องชำระเงินของฉัน (เมื่อสรุปค่าใช้จ่ายแล้วและยังไม่จ่าย)
+  const myAtt = s.attendees.some(a=>a.memberId===meId);
+  const myPaid = !!(s.paid && s.paid[meId]);
+  const myReq = s.payReq && s.payReq[meId];
+  let payBox = "";
+  if(myAtt && !myPaid && total>0){
+    payBox = myReq? `
+      <div class="card" style="margin-bottom:12px; border-color:rgba(255,194,75,.5);">
+        <h3>💰 การชำระของฉัน</h3>
+        <p class="muted" style="margin:0 0 10px;">⏳ แจ้ง${myReq.method==="cash"?"จ่ายเงินสด":"โอนเงิน (แนบสลิป)"}แล้ว — รอผู้จัดการกดอนุมัติ</p>
+        <div class="frow">
+          <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openPayReview('${s.id}','${meId}')">👁️ ดูรายละเอียด</button>
+          <button class="btn btn-danger btn-sm" style="flex:1;" onclick="cancelPayReq('${s.id}')">ยกเลิกคำขอ</button>
+        </div>
+      </div>` : `
+      <div class="card" style="margin-bottom:12px; border-color:rgba(198,242,78,.5);">
+        <h3>💰 การชำระของฉัน — ${money(split[meId]||0)}</h3>
+        <div class="frow">
+          <button class="btn btn-lime btn-sm" style="flex:1;" onclick="openPaySlip('${s.id}')">🧾 แนบสลิปโอนเงิน</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="payCash('${s.id}')">💵 แจ้งจ่ายเงินสด</button>
+        </div>
+        <p class="muted" style="margin:8px 0 0; font-size:11.5px;">แนบสลิปแล้วระบบจะอ่านยอดเงินให้อัตโนมัติ จากนั้นผู้จัดการกดอนุมัติ</p>
+      </div>`;
+  }
+
+  const hourEdit = s.costMode==="hours" && canMg ? s.attendees.map(a=>{
+    const m = mem(a.memberId); if(!m) return "";
+    return `<div class="court-line"><span style="flex:1;">${m.emoji} ${esc(m.name)}</span>
+      <input type="number" step="0.5" min="0" value="${a.hours}" style="width:80px; text-align:center;" onchange="setAttHours('${s.id}','${a.memberId}',this.value)">
+      <span class="muted">ชม.</span></div>`;
+  }).join("") : "";
+
+  const paidCount = s.attendees.filter(a=> s.paid && s.paid[a.memberId]).length;
+
+  return `
+    <div class="modal-head"><h3>💰 การจ่ายเงิน — นัด ${fmtDateShort(s.date)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+
+    <div class="sum-total">
+      <div class="muted">ค่าใช้จ่ายรวมทั้งนัด</div>
+      <div class="n">${money(total)}</div>
+      <div class="muted">คอร์ท ${money(courtCost(s))} + ลูก ${money(shuttleCost(s))} • จ่ายแล้ว ${paidCount}/${s.attendees.length} คน</div>
+    </div>
+
+    ${canMg? `<div class="frow" style="margin-bottom:10px;">
+      <button class="btn btn-sm ${s.costMode!=="hours"?"btn-lime":"btn-ghost"}" style="flex:1;" onclick="setCostMode('${s.id}','equal')">หารเท่ากัน</button>
+      <button class="btn btn-sm ${s.costMode==="hours"?"btn-lime":"btn-ghost"}" style="flex:1;" onclick="setCostMode('${s.id}','hours')">หารตามชั่วโมง</button>
+    </div>`:""}
+
+    ${hourEdit? `<div class="card" style="margin-bottom:12px;"><h3>⏱️ ชั่วโมงเล่น</h3>${hourEdit}</div>`:""}
+
+    ${payBox}
+    <div class="card" style="margin-bottom:0;">
+      <h3>💸 รายคน</h3>
+      <table class="tbl">${costRows || '<tr><td class="muted">ไม่มีผู้เข้าร่วม</td></tr>'}</table>
+    </div>
+
+    <div style="height:12px;"></div>
+    ${canMg? `<button class="btn btn-blue btn-block" onclick="openStartPlay('${s.id}')">✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก</button><div style="height:8px;"></div>`:""}
+    <button class="btn btn-ghost btn-block" onclick="openPayHistory()">🧾 ประวัติการจ่ายเงินทั้งหมด</button>
+    <div style="height:8px;"></div>
+    <div class="frow">
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openSummary('${s.id}')">📊 สรุปผล</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="closeModal()">◀️ ย้อนกลับ</button>
+    </div>`;
+}
+
+/* ---------- ประวัติการจ่ายเงินทั้งหมด ---------- */
+function openPayHistory(){
+  const items = [];
+  db.sessions.filter(s=>s.status==="done").forEach(s=>{
+    const split = costSplit(s);
+    s.attendees.forEach(a=>{
+      const mid = a.memberId;
+      if(!(s.paid && s.paid[mid])) return;
+      const info = (s.payInfo && s.payInfo[mid]) || {};
+      items.push({ sid:s.id, date:s.date, mid, amt:split[mid]||0, method:info.method||"", by:info.approvedBy, at:info.approvedAt||info.at||0, slip:info.slip||null });
+    });
+  });
+  items.sort((a,b)=> (b.at||0)-(a.at||0) || b.date.localeCompare(a.date));
+  const M = { slip:"🧾 โอน", cash:"💵 สด", manual:"✓ ผู้จัดการบันทึก" };
+  const rows = items.map(it=>`
+    <div class="court-line">
+      <span style="flex:1;">${emojiOf(it.mid)} ${esc(nameOf(it.mid))}<br><span class="muted" style="font-size:12px;">นัด ${fmtDateShort(it.date)} • ${M[it.method]||"จ่ายแล้ว"}${it.by? " • อนุมัติโดย "+esc(nameOf(it.by)):""}</span></span>
+      <b style="color:var(--lime);">${money(it.amt)}</b>
+      ${it.slip? `<span style="cursor:pointer; font-size:18px;" onclick="viewSlip('${it.sid}','${it.mid}')">👁️</span>`:""}
+    </div>`).join("");
+  modal(`
+    <div class="modal-head"><h3>🧾 ประวัติการจ่ายเงิน (${items.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    ${rows || '<div class="empty"><div class="big">🧾</div>ยังไม่มีประวัติการจ่ายเงิน</div>'}
+    <div style="height:12px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+async function setCostMode(sid, mode){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  s.costMode = mode; await storeSave();
+  modal(renderPaymentHtml(s)); renderAll();
+}
+async function setAttHours(sid, mid, val){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const a = s.attendees.find(a=>a.memberId===mid);
+  if(a) a.hours = Number(val)||0;
+  await storeSave();
+  modal(renderPaymentHtml(s)); renderAll();
+}
+async function togglePaid(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  if(!canManage(s)) return;   // แก้สถานะโดยตรง: เฉพาะ Admin/ผู้จัดการ
+  if(!s.paid) s.paid = {};
+  s.paid[mid] = !s.paid[mid];
+  if(s.paid[mid]){
+    if(!s.payInfo) s.payInfo = {};
+    if(!s.payInfo[mid]) s.payInfo[mid] = { method:"manual", at:Date.now(), approvedBy:meId };
+    if(s.payReq) delete s.payReq[mid];
+    if(s.payNudge) delete s.payNudge[mid];
+  } else {
+    if(s.payInfo) delete s.payInfo[mid];
+  }
+  await storeSave();
+  modal(renderPaymentHtml(s)); renderAll();
+}
+
+/* =====================================================
+   PAYMENT: แนบสลิป (อ่านยอดอัตโนมัติ) / เงินสด / อนุมัติ
+   ===================================================== */
+function payAmt(s, mid){ return costSplit(s)[mid]||0; }
+function pendingApprovals(){
+  const out = [];
+  db.sessions.filter(s=>s.status==="done" && canManage(s)).forEach(s=>{
+    Object.keys(s.payReq||{}).forEach(mid=>{
+      if(!(s.paid && s.paid[mid])) out.push({sid:s.id, date:s.date, mid, req:s.payReq[mid]});
+    });
+  });
+  return out;
+}
+function compressImage(file, maxW, quality){
+  return new Promise((res, rej)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const sc = Math.min(1, maxW/img.width);
+        const cv = document.createElement("canvas");
+        cv.width = Math.max(1, Math.round(img.width*sc));
+        cv.height = Math.max(1, Math.round(img.height*sc));
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        res(cv.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = rej;
+      img.src = fr.result;
+    };
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve(true);
+  if(window.__tessLoading) return window.__tessLoading;
+  window.__tessLoading = new Promise((res, rej)=>{
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js";
+    sc.onload = ()=> res(true); sc.onerror = ()=> rej(new Error("load fail"));
+    document.head.appendChild(sc);
+  });
+  return window.__tessLoading;
+}
+async function ocrSlipAmounts(dataUrl){
+  await loadTesseract();
+  const r = await Tesseract.recognize(dataUrl, "eng");
+  const text = (r && r.data && r.data.text) || "";
+  const nums = [...text.matchAll(/\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2}/g)]
+    .map(x=> parseFloat(x[0].replace(/,/g,"")))
+    .filter(n=> n>0 && n<1000000);
+  return [...new Set(nums)];
+}
+function openPaySlip(sid){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = ()=> handleSlipFile(sid, inp);
+  inp.click();
+}
+async function handleSlipFile(sid, inp){
+  const f = inp.files && inp.files[0]; if(!f) return;
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  toast("กำลังเตรียมรูปสลิป…");
+  let dataUrl;
+  try{
+    dataUrl = await compressImage(f, 900, 0.62);
+    if(dataUrl.length > 420000) dataUrl = await compressImage(f, 700, 0.5);
+    if(dataUrl.length > 420000) return toast("รูปใหญ่เกินไป — ลองครอปเฉพาะส่วนของสลิป", true);
+  }catch(e){ return toast("อ่านไฟล์รูปไม่สำเร็จ ลองรูปอื่น", true); }
+  const owed = payAmt(s, meId);
+  window.__slipDraft = { sid, dataUrl, amountRead:null, matched:false };
+  modal(`
+    <div class="modal-head"><h3>🧾 ยืนยันสลิปโอนเงิน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <img src="${dataUrl}" class="slip-img" alt="slip">
+    <div class="row" style="margin:10px 0 4px;"><span class="muted">ยอดที่ต้องจ่าย</span><b>${money(owed)}</b></div>
+    <div id="slipOcr" class="muted" style="margin-bottom:10px;">🔎 กำลังอ่านยอดเงินจากสลิปอัตโนมัติ… (ส่งได้เลยไม่ต้องรอ)</div>
+    <button class="btn btn-lime btn-block" onclick="submitSlip()">📨 ส่งให้ผู้จัดการอนุมัติ</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal(); openPayment('${sid}');">◀️ ย้อนกลับ</button>`);
+  try{
+    const nums = await ocrSlipAmounts(dataUrl);
+    const d = window.__slipDraft;
+    if(!d || d.sid!==sid) return;
+    let best = null;
+    nums.forEach(n=>{ if(best===null || Math.abs(n-owed) < Math.abs(best-owed)) best = n; });
+    d.amountRead = best; d.matched = best!==null && Math.abs(best-owed) < 0.01;
+    const el = $("slipOcr");
+    if(el){
+      if(d.matched) el.innerHTML = `✅ อ่านยอดจากสลิปได้ <b style="color:var(--lime);">${money(best)}</b> — ตรงกับยอดที่ต้องจ่าย`;
+      else if(best!==null) el.innerHTML = `⚠️ อ่านยอดจากสลิปได้ ~${money(best)} (ยอดที่ต้องจ่าย ${money(owed)}) — ผู้จัดการจะตรวจอีกครั้ง`;
+      else el.textContent = "อ่านยอดอัตโนมัติไม่สำเร็จ — ผู้จัดการจะตรวจจากรูปสลิปแทน";
+    }
+  }catch(e){
+    const el = $("slipOcr");
+    if(el) el.textContent = "อ่านยอดอัตโนมัติไม่ได้ (ต้องต่ออินเทอร์เน็ต) — ผู้จัดการจะตรวจจากรูปสลิปแทน";
+  }
+}
+async function submitSlip(){
+  const d = window.__slipDraft; if(!d) return;
+  const s = db.sessions.find(x=>x.id===d.sid); if(!s) return;
+  if(!s.payReq) s.payReq = {};
+  s.payReq[meId] = { method:"slip", slip:d.dataUrl, amountRead:d.amountRead, matched:!!d.matched, at:Date.now() };
+  const sid = d.sid;
+  window.__slipDraft = null;
+  await storeSave(); closeModal(); renderAll(); openPayment(sid);
+  toast("📨 ส่งสลิปแล้ว — รอผู้จัดการอนุมัติ");
+}
+async function payCash(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const owed = payAmt(s, meId);
+  if(!confirm("แจ้งว่าได้จ่ายเงินสด "+money(owed)+" ให้ผู้จัดการแล้ว?\nผู้จัดการจะกดยืนยันอีกครั้ง")) return;
+  if(!s.payReq) s.payReq = {};
+  s.payReq[meId] = { method:"cash", at:Date.now() };
+  await storeSave(); renderAll(); openPayment(sid);
+  toast("💵 แจ้งจ่ายเงินสดแล้ว — รอผู้จัดการอนุมัติ");
+}
+async function cancelPayReq(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !s.payReq) return;
+  delete s.payReq[meId];
+  await storeSave(); renderAll(); openPayment(sid);
+  toast("ยกเลิกคำขอแล้ว");
+}
+function openPayReview(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const req = s.payReq && s.payReq[mid]; if(!req) return openPayment(sid);
+  const mg = canManage(s);
+  if(!(mg || mid===meId)) return;
+  const m = mem(mid);
+  const owed = payAmt(s, mid);
+  let ocrLine = "";
+  if(req.method==="slip"){
+    if(req.matched) ocrLine = `<div style="margin-bottom:10px;">✅ ระบบอ่านยอดจากสลิปได้ <b style="color:var(--lime);">${money(req.amountRead)}</b> — <b>ตรงกับยอดที่ต้องจ่าย</b></div>`;
+    else if(req.amountRead!=null) ocrLine = `<div style="margin-bottom:10px;">⚠️ ระบบอ่านยอดจากสลิปได้ ~<b style="color:var(--amber);">${money(req.amountRead)}</b> (ยอดที่ต้องจ่าย ${money(owed)}) — โปรดตรวจจากรูป</div>`;
+    else ocrLine = `<div class="muted" style="margin-bottom:10px;">อ่านยอดอัตโนมัติไม่สำเร็จ — โปรดตรวจจากรูปสลิป</div>`;
+  }
+  modal(`
+    <div class="modal-head"><h3>💰 ตรวจการชำระเงิน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">สมาชิก</span><b>${m? m.emoji+" "+esc(m.name):"?"}</b></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">ยอดที่ต้องจ่าย</span><b>${money(owed)}</b></div>
+    <div class="row" style="margin-bottom:8px;"><span class="muted">วิธีชำระ</span><b>${req.method==="cash"?"💵 เงินสด":"🧾 โอนเงิน (แนบสลิป)"}</b></div>
+    <div class="row" style="margin-bottom:10px;"><span class="muted">แจ้งเมื่อ</span><b>${req.at? new Date(req.at).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"-"}</b></div>
+    ${req.slip? `<img src="${req.slip}" class="slip-img" alt="slip" style="margin-bottom:10px;">`:""}
+    ${ocrLine}
+    ${mg? `
+      <button class="btn btn-lime btn-block" onclick="approvePay('${sid}','${mid}')">✅ อนุมัติ — ยืนยันรับเงินแล้ว</button>
+      <div style="height:8px;"></div>
+      <button class="btn btn-danger btn-block" onclick="rejectPay('${sid}','${mid}')">❌ ปฏิเสธ (กลับเป็นยังไม่จ่าย)</button>`
+    : `<button class="btn btn-danger btn-block" onclick="cancelPayReq('${sid}')">ยกเลิกคำขอของฉัน</button>`}
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
+}
+async function approvePay(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  const req = s.payReq && s.payReq[mid]; if(!req) return;
+  if(!s.paid) s.paid = {};
+  if(!s.payInfo) s.payInfo = {};
+  s.paid[mid] = true;
+  s.payInfo[mid] = { method:req.method, slip:req.slip||null, amountRead:req.amountRead!=null? req.amountRead:null, at:req.at, approvedBy:meId, approvedAt:Date.now() };
+  delete s.payReq[mid];
+  if(s.payNudge) delete s.payNudge[mid];
+  await storeSave(); renderAll(); openPayment(sid);
+  toast("✅ อนุมัติแล้ว — "+nameOf(mid)+" จ่ายเรียบร้อย");
+}
+async function rejectPay(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!confirm("ปฏิเสธรายการนี้? สถานะจะกลับเป็น \"ยังไม่จ่าย\"")) return;
+  if(s.payReq) delete s.payReq[mid];
+  await storeSave(); renderAll(); openPayment(sid);
+  toast("ปฏิเสธแล้ว — สถานะกลับเป็นยังไม่จ่าย");
+}
+function viewSlip(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const info = s.payInfo && s.payInfo[mid]; if(!info || !info.slip) return;
+  modal(`
+    <div class="modal-head"><h3>🧾 สลิปของ ${emojiOf(mid)} ${esc(nameOf(mid))}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <img src="${info.slip}" class="slip-img" alt="slip">
+    <p class="muted" style="margin:10px 0 12px;">อนุมัติโดย ${emojiOf(info.approvedBy)} ${esc(nameOf(info.approvedBy))}${info.approvedAt? " • "+new Date(info.approvedAt).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</p>
+    <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
+}
+/* Admin/ผู้จัดการ แตะคนที่ยังไม่จ่าย: ส่งแจ้งเตือน หรือเปลี่ยนสถานะ */
+function openUnpaidAction(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  const m = mem(mid); if(!m) return;
+  const nudged = s.payNudge && s.payNudge[mid];
+  modal(`
+    <div class="modal-head"><h3>💸 ${m.emoji} ${esc(m.name)} — ยังไม่จ่าย</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="row" style="margin-bottom:10px;"><span class="muted">ยอดที่ต้องจ่าย (นัด ${fmtDateShort(s.date)})</span><b>${money(payAmt(s,mid))}</b></div>
+    ${nudged? `<p class="muted" style="margin-top:0;">📣 ส่งแจ้งเตือนล่าสุดเมื่อ ${new Date(nudged.at).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} โดย ${emojiOf(nudged.by)} ${esc(nameOf(nudged.by))}</p>`:""}
+    <button class="btn btn-lime btn-block" onclick="sendNudge('${sid}','${mid}')">📣 ส่งแจ้งเตือนให้จ่าย${nudged?" (อีกครั้ง)":""}</button>
+    <p class="muted" style="margin:6px 0 10px; font-size:11.5px;">การแจ้งเตือนจะขึ้นเด่นๆ บนหน้าแอปของ ${esc(m.name)} ทุกครั้งที่เปิดแอป จนกว่าจะจ่าย</p>
+    <button class="btn btn-blue btn-block" onclick="togglePaid('${sid}','${mid}')">✓ เปลี่ยนสถานะเป็น "จ่ายแล้ว" (รับเงินแล้ว)</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
+}
+async function sendNudge(sid, mid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!s.payNudge) s.payNudge = {};
+  s.payNudge[mid] = { by:meId, at:Date.now() };
+  await storeSave(); renderAll(); openPayment(sid);
+  toast("📣 ส่งแจ้งเตือนถึง "+nameOf(mid)+" แล้ว");
+}
+
+function openPendingList(){
+  const pend = pendingApprovals();
+  const rows = pend.map(p=>`
+    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:8px; text-align:left; display:flex; justify-content:space-between; align-items:center;" onclick="openPayReview('${p.sid}','${p.mid}')">
+      <span>${emojiOf(p.mid)} ${esc(nameOf(p.mid))} • นัด ${fmtDateShort(p.date)} • ${p.req.method==="cash"?"💵 เงินสด":"🧾 สลิป"}</span>
+      <b style="color:var(--amber);">⏳ ตรวจ</b>
+    </button>`).join("");
+  modal(`
+    <div class="modal-head"><h3>💰 รายการรออนุมัติ (${pend.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    ${rows || '<div class="empty"><div class="big">✅</div>ไม่มีรายการค้างอนุมัติ</div>'}
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+
+/* =====================================================
+   VIEW: สมาชิก
+   ===================================================== */
+function renderMembers(){
+  const v = $("v-members");
+  const rows = memberSort(db.members).map(m=>{
+    const tags = (m.role==="admin"?'<span class="tag tag-admin">ADMIN</span> ':"") +
+                 (db.settings.defaultManagerId===m.id?'<span class="tag tag-mgr">ผู้จัดการ</span>':"");
+    const canDel = canDeleteMember(m.id) && !(m.role==="admin" && !isAdmin());
+    const info = [m.phone? "📞 "+esc(m.phone):"", m.note? "📝 "+esc(m.note):""].filter(Boolean).join(" • ");
+    return `<div class="mem-row">
+      <div class="rank-av" style="cursor:pointer;" onclick="openPlayerStats('${m.id}')">${m.emoji}</div>
+      <div style="flex:1; cursor:pointer;" onclick="openPlayerStats('${m.id}')">
+        <div style="font-weight:700;">${esc(m.name)} ${m.id===meId?'<span class="muted">(คุณ)</span>':""}</div>
+        ${info? `<div class="muted" style="font-size:11.5px; margin-top:1px;">${info}</div>`:""}
+        <div style="margin-top:2px;">${tags}</div>
+      </div>
+      ${(m.id===meId || isAdmin())? `<button class="btn btn-ghost btn-sm" onclick="openMemberEdit('${m.id}')">แก้ไข</button>`:""}
+      ${isAdmin() && m.id!==meId ? `<button class="btn btn-ghost btn-sm" onclick="resetPin('${m.id}')">รีเซ็ต PIN</button>`:""}
+      ${canDel? `<button class="btn btn-danger btn-sm" onclick="removeMember('${m.id}')">${m.id===meId?"ยกเลิกสมาชิก":"ลบ"}</button>`:""}
+    </div>`;
+  }).join("");
+  v.innerHTML = `
+    <div class="card">
+      <h3>👥 สมาชิกก๊วน (${db.members.length})</h3>
+      <p class="muted" style="margin:0 0 6px;">เรียงตามตัวอักษร • ทุกคนแก้ไขข้อมูลของตัวเองได้ • Admin แก้ไขข้อมูลได้ทุกคน • การลบ: ตัวเอง, Admin หรือผู้จัดการ</p>
+      ${rows}
+      <div style="height:12px;"></div>
+      <button class="btn btn-lime btn-block" onclick="openAddMember()">+ เพิ่มสมาชิกใหม่</button>
+    </div>`;
+}
+function openAddMember(){
+  window.__selEmoji = EMOJIS[Math.floor(db.members.length % EMOJIS.length)];
+  modal(`
+    <div class="modal-head"><h3>เพิ่มสมาชิกใหม่</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>ชื่อเล่น</label><input type="text" id="amName" placeholder="เช่น เอก, มด, พี่หนุ่ม"></div>
+    <div class="field"><label>ไอคอนประจำตัว</label><div class="emoji-grid" id="amEmoji">${EMOJIS.map(e=>`<div class="emoji-opt ${e===window.__selEmoji?"sel":""}" onclick="pickAmEmoji('${e}')">${e}</div>`).join("")}</div></div>
+    <p class="muted">สมาชิกใหม่จะตั้ง PIN เองตอนล็อกอินครั้งแรก</p>
+    <button class="btn btn-lime btn-block" onclick="addMember()">เพิ่มเข้าก๊วน</button>`);
+}
+function pickAmEmoji(e){
+  window.__selEmoji = e;
+  document.querySelectorAll("#amEmoji .emoji-opt").forEach(el=> el.classList.toggle("sel", el.textContent===e));
+}
+async function addMember(){
+  const name = $("amName").value.trim();
+  if(!name) return toast("กรอกชื่อก่อนนะ", true);
+  if(db.members.some(m=>m.name.toLowerCase()===name.toLowerCase())) return toast("มีชื่อนี้ในก๊วนแล้ว", true);
+  db.members.push({ id:uid(), name, emoji:window.__selEmoji||"🏸", pin:null, role:"member", baseW:0, baseL:0, addedBy:meId });
+  await storeSave(); closeModal(); renderAll();
+  toast("เพิ่ม "+name+" เข้าก๊วนแล้ว 🎉");
+}
+async function removeMember(id){
+  if(!canDeleteMember(id)) return toast("ไม่มีสิทธิ์ลบสมาชิกคนนี้ (เฉพาะตัวเอง, Admin หรือผู้จัดการ)", true);
+  const m = mem(id); if(!m) return;
+  if(m.role==="admin" && !isAdmin()) return toast("ลบ Admin ไม่ได้", true);
+  if(!confirm((id===meId?"ยกเลิกการเป็นสมาชิกของคุณเอง":"ลบ "+m.name+" ออกจากก๊วน")+"?\n(ประวัติในนัดเก่ายังเก็บไว้ แต่จะไม่อยู่ในรายชื่อและนัดที่ยังไม่จบ)")) return;
+  db.members = db.members.filter(x=>x.id!==id);
+  db.sessions.forEach(s=>{
+    if(s.status!=="done"){
+      s.attendees = s.attendees.filter(a=>a.memberId!==id);
+      if(s.paid) delete s.paid[id];
+    }
+  });
+  if(db.settings.defaultManagerId===id){
+    const admin = db.members.find(x=>x.role==="admin");
+    db.settings.defaultManagerId = admin? admin.id : (db.members[0]&&db.members[0].id);
+  }
+  await storeSave();
+  if(id===meId){ toast("ยกเลิกสมาชิกแล้ว ขอบคุณที่ร่วมก๊วนกันมา 🙏"); logout(); }
+  else { renderAll(); toast("ลบ "+m.name+" ออกจากก๊วนแล้ว"); }
+}
+async function resetPin(id){
+  if(!isAdmin()) return;
+  const m = mem(id); if(!m) return;
+  if(!confirm("รีเซ็ต PIN ของ "+m.name+"? เขาจะตั้ง PIN ใหม่ตอนล็อกอินครั้งถัดไป")) return;
+  m.pin = null; await storeSave(); toast("รีเซ็ต PIN ของ "+m.name+" แล้ว");
+}
+
+/* ---------- profile / member edit (ตัวเองแก้ของตัวเอง • Admin แก้ได้ทุกคน) ---------- */
+function openProfile(){ openMemberEdit(meId); }
+function openMemberEdit(id){
+  const m = mem(id); if(!m) return;
+  const self = id===meId;
+  if(!(self || isAdmin())) return toast("แก้ไขได้เฉพาะข้อมูลของตัวเอง (Admin แก้ได้ทุกคน)", true);
+  window.__selEmojiP = m.emoji; window.__editMemId = id;
+  modal(`
+    <div class="modal-head"><h3>${self? "โปรไฟล์ของฉัน" : "แก้ไขข้อมูลสมาชิก (โดย Admin)"}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    ${self? "" : `<p class="muted" style="margin-top:0;">กำลังแก้ไขข้อมูลของ ${m.emoji} ${esc(m.name)}</p>`}
+    <div class="field"><label>ชื่อเล่น</label><input type="text" id="pfName" value="${esc(m.name)}"></div>
+    <div class="field"><label>ไอคอนประจำตัว</label><div class="emoji-grid" id="pfEmoji">${EMOJIS.map(e=>`<div class="emoji-opt ${e===m.emoji?"sel":""}" onclick="pickPfEmoji('${e}')">${e}</div>`).join("")}</div></div>
+    <div class="field"><label>เบอร์ติดต่อ (ไม่บังคับ)</label><input type="text" id="pfPhone" value="${esc(m.phone||"")}" placeholder="เช่น 081-234-5678"></div>
+    <div class="field"><label>ข้อมูลเพิ่มเติม (ไม่บังคับ)</label><input type="text" id="pfNote" value="${esc(m.note||"")}" placeholder="เช่น มือ N, ถนัดคู่หน้า, สังกัด อาคาร 3"></div>
+    <button class="btn btn-lime btn-block" onclick="saveMemberEdit()">บันทึก</button>
+    ${self? `
+      <div style="height:10px;"></div>
+      <button class="btn btn-ghost btn-block" onclick="changeMyPin()">เปลี่ยน PIN</button>
+      <div style="height:10px;"></div>
+      <button class="btn btn-danger btn-block" onclick="logout()">ออกจากระบบ</button>`
+    : `
+      <div style="height:10px;"></div>
+      <button class="btn btn-ghost btn-block" onclick="resetPin('${m.id}')">รีเซ็ต PIN ของ ${esc(m.name)}</button>`}`);
+}
+function pickPfEmoji(e){
+  window.__selEmojiP = e;
+  document.querySelectorAll("#pfEmoji .emoji-opt").forEach(el=> el.classList.toggle("sel", el.textContent===e));
+}
+async function saveMemberEdit(){
+  const m = mem(window.__editMemId); if(!m) return;
+  if(!(m.id===meId || isAdmin())) return;
+  const name = $("pfName").value.trim();
+  if(!name) return toast("ชื่อห้ามว่าง", true);
+  if(db.members.some(x=>x.id!==m.id && x.name.toLowerCase()===name.toLowerCase())) return toast("มีชื่อนี้ในก๊วนแล้ว", true);
+  m.name = name; m.emoji = window.__selEmojiP||m.emoji;
+  m.phone = $("pfPhone").value.trim();
+  m.note = $("pfNote").value.trim();
+  await storeSave(); closeModal(); renderAll();
+  toast(m.id===meId? "บันทึกโปรไฟล์แล้ว" : "บันทึกข้อมูลของ "+m.name+" แล้ว");
+}
+async function changeMyPin(){
+  const m = me(); if(!m) return;
+  const p1 = prompt("PIN ใหม่ 4 หลัก:");
+  if(p1===null) return;
+  if(!/^\d{4}$/.test(p1)) return toast("PIN ต้องเป็นตัวเลข 4 หลัก", true);
+  m.pin = p1; await storeSave(); toast("เปลี่ยน PIN แล้ว");
+}
+
+/* =====================================================
+   VIEW: อันดับ (สถิติสะสม รวมยอดยกมาจากไฟล์ Excel)
+   ===================================================== */
+function careerStats(){
+  return db.members.map(m=>{
+    let w = m.baseW||0, l = m.baseL||0, played = 0;
+    db.sessions.filter(s=>s.status==="done").forEach(s=>{
+      if(s.attendees.some(a=>a.memberId===m.id)) played++;
+      const st = sessionStats(s)[m.id];
+      if(st){ w+=st.w; l+=st.l; }
+    });
+    const sets = w+l;
+    return { id:m.id, name:m.name, emoji:m.emoji, w, l, sets, played, wr: sets>0? w/sets : null };
+  });
+}
+function renderRank(){
+  const v = $("v-rank");
+  const all = careerStats();
+  const ranked = all.filter(x=>x.sets>0).sort((a,b)=> b.wr-a.wr || b.w-a.w);
+  const never = all.filter(x=>x.sets===0);
+  const rows = ranked.map((x,i)=>`
+    <div class="rank-row" style="cursor:pointer;" onclick="openPlayerStats('${x.id}')">
+      <div class="rank-no ${i<3?"r"+(i+1):""}">${i<3? ["🥇","🥈","🥉"][i] : i+1}</div>
+      <div class="rank-av">${x.emoji}</div>
+      <div style="flex:1;">
+        <div style="font-weight:700; font-size:13.5px;">${esc(x.name)} <span class="muted" style="font-size:10.5px;">👁️ แตะดูรายละเอียด</span></div>
+        <div class="wbar"><i style="width:${Math.round(x.wr*100)}%;"></i></div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:'Prompt',sans-serif; font-weight:800;">${Math.round(x.wr*100)}%</div>
+        <div class="muted" style="font-size:11px;">${x.w}W - ${x.l}L</div>
+      </div>
+    </div>`).join("");
+  v.innerHTML = `
+    <div class="card">
+      <h3>🏆 อันดับก๊วน <span class="muted" style="font-weight:400;">(แตะชื่อดูประวัติรายคน)</span></h3>
+      ${rows || '<div class="empty"><div class="big">🏆</div>ยังไม่มีสถิติ — จบนัดแรกแล้วอันดับจะขึ้นที่นี่</div>'}
+    </div>
+    ${never.length? `<div class="card"><h3>🌱 ยังไม่มีสถิติ</h3><div class="chips">${never.map(x=>`<span class="chip" style="cursor:default;"><span class="av">${x.emoji}</span>${esc(x.name)}</span>`).join("")}</div></div>`:""}`;
+}
+
+/* ---------- สถิติรายคน: ตีกับใคร แพ้ชนะกี่แต้ม ---------- */
+function openPlayerStats(id){
+  const m = mem(id); if(!m) return;
+  const c = careerStats().find(x=>x.id===id) || {w:0,l:0,sets:0,wr:null};
+  const opp = {}, par = {}, items = [];
+  db.sessions.filter(s=>s.status==="done").sort((a,b)=> b.date.localeCompare(a.date)).forEach(s=>{
+    (s.sets||[]).forEach(x=>{
+      const inA = x.teamA.includes(id), inB = x.teamB.includes(id);
+      if(!inA && !inB) return;
+      const w = setWinner(x);
+      const won = (w==="A"&&inA) || (w==="B"&&inB);
+      const myTeam = inA? x.teamA : x.teamB;
+      const others = inA? x.teamB : x.teamA;
+      const myS = inA? x.scoreA : x.scoreB, otS = inA? x.scoreB : x.scoreA;
+      others.forEach(o=>{ if(!opp[o]) opp[o]={w:0,l:0}; won? opp[o].w++ : opp[o].l++; });
+      myTeam.filter(p=>p!==id).forEach(p=>{ if(!par[p]) par[p]={w:0,l:0}; won? par[p].w++ : par[p].l++; });
+      items.push({date:s.date, court:x.court, myTeam, others, myS, otS, won});
+    });
+  });
+  const oppRows = Object.keys(opp).sort((a,b)=> (opp[b].w+opp[b].l)-(opp[a].w+opp[a].l)).map(o=>
+    `<tr><td>${emojiOf(o)} ${esc(nameOf(o))}</td>
+      <td style="text-align:center; color:var(--lime); font-weight:700;">${opp[o].w}</td>
+      <td style="text-align:center; color:var(--coral);">${opp[o].l}</td></tr>`).join("");
+  const parRows = Object.keys(par).sort((a,b)=> (par[b].w+par[b].l)-(par[a].w+par[a].l)).map(o=>
+    `<tr><td>${emojiOf(o)} ${esc(nameOf(o))}</td>
+      <td style="text-align:center; color:var(--lime); font-weight:700;">${par[o].w}</td>
+      <td style="text-align:center; color:var(--coral);">${par[o].l}</td></tr>`).join("");
+  const setRows = items.map(it=>`
+    <div class="set-card">
+      <div class="set-teams">
+        <div class="set-team ${it.won?"w":""}">${teamLabel(it.myTeam)}</div>
+        <div class="set-score">${it.myS} : ${it.otS}</div>
+        <div class="set-team ${it.won?"":"w"}">${teamLabel(it.others)}</div>
+      </div>
+      <div class="set-meta">${fmtDateShort(it.date)} • คอร์ท ${esc(it.court)} • ${it.won? '<span style="color:var(--lime); font-weight:700;">ชนะ</span>' : '<span style="color:var(--coral); font-weight:700;">แพ้</span>'} ${Math.abs(it.myS-it.otS)} แต้ม</div>
+    </div>`).join("");
+  modal(`
+    <div class="modal-head"><h3>${m.emoji} สถิติของ ${esc(m.name)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="statgrid" style="margin:0 0 12px;">
+      <div class="statbox"><div class="v" style="color:var(--lime);">${c.w}</div><div class="l">ชนะ (เซ็ต)</div></div>
+      <div class="statbox"><div class="v" style="color:var(--coral);">${c.l}</div><div class="l">แพ้ (เซ็ต)</div></div>
+      <div class="statbox"><div class="v">${c.sets>0? Math.round(c.wr*100)+"%":"-"}</div><div class="l">อัตราชนะ</div></div>
+    </div>
+    ${(m.baseW||m.baseL)? `<p class="muted" style="margin:0 0 10px;">* รวมยอดยกมาจากไฟล์เดิม ${m.baseW||0}W-${m.baseL||0}L (ไม่มีรายละเอียดรายเซ็ต)</p>`:""}
+    ${oppRows? `<div class="card" style="margin-bottom:12px;"><h3>⚔️ สถิติกับคู่ต่อสู้</h3>
+      <table class="tbl"><tr><th>เจอกับ</th><th style="text-align:center;">ชนะ</th><th style="text-align:center;">แพ้</th></tr>${oppRows}</table></div>`:""}
+    ${parRows? `<div class="card" style="margin-bottom:12px;"><h3>🤝 สถิติกับคู่หู</h3>
+      <table class="tbl"><tr><th>จับคู่กับ</th><th style="text-align:center;">ชนะ</th><th style="text-align:center;">แพ้</th></tr>${parRows}</table></div>`:""}
+    <div class="card" style="margin-bottom:0;"><h3>📜 เซ็ตย้อนหลัง (${items.length})</h3>
+      ${setRows || '<div class="empty"><div class="big">🏸</div>ยังไม่มีเซ็ตที่บันทึกไว้</div>'}</div>
+    <div style="height:12px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+
+/* =====================================================
+   VIEW: ประวัติ
+   ===================================================== */
+function renderHistory(){
+  const v = $("v-history");
+  const done = db.sessions.filter(s=>s.status==="done").sort((a,b)=> b.date.localeCompare(a.date));
+  const rows = done.map(s=>{
+    const paidCount = s.attendees.filter(a=> s.paid && s.paid[a.memberId]).length;
+    const mvps = sessionMVP(s);
+    return `<div class="sess-item" onclick="openSummary('${s.id}')">
+      <div class="row">
+        <div>
+          <div style="font-weight:700; font-family:'Prompt',sans-serif;">${fmtDateShort(s.date)}</div>
+          <div class="muted">${s.attendees.length} คน • ${(s.sets||[]).length} เซ็ต • รวม ${money(totalCost(s))}${mvps.length? " • ⭐ "+mvps.map(id=>esc(nameOf(id))).join(", "):""}</div>
+        </div>
+        <span class="tag ${paidCount===s.attendees.length && s.attendees.length>0 ?"tag-paid":"tag-unpaid"}" style="cursor:pointer;">${paidCount}/${s.attendees.length} จ่ายแล้ว</span>
+      </div>
+    </div>`;
+  }).join("");
+  v.innerHTML = `<div class="card"><h3>🗂️ ประวัตินัดที่จบแล้ว</h3>${rows || '<div class="empty"><div class="big">🗂️</div>ยังไม่มีนัดที่จบ</div>'}</div>`;
+}
+
+/* =====================================================
+   AUTO REFRESH (ดึงข้อมูลที่เพื่อนแก้มาอัปเดต)
+   ===================================================== */
+async function pollRemote(){
+  if(modalOpen()) return;
+  if(gasUrl() && !clubKey()) return;   // ยังไม่ผ่านรหัสก๊วน — ไม่ดึงข้อมูล
+  try{
+    if(gasUrl()){
+      const remote = await gasLoad();
+      if(remote && (remote.rev||0) > (db.rev||0)){
+        db = remote;
+        if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return; }
+        if(meId) renderAll(); else renderLogin();
+      }
+      updateSyncBadge();
+      return;
+    }
+    if(!storageOK) return;
+    const r = await window.storage.get(KEY, true);
+    if(r && r.value && r.value!==lastRaw){
+      const incoming = JSON.parse(r.value);
+      if((incoming.rev||0) >= (db.rev||0)){
+        lastRaw = r.value; db = incoming;
+        if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return; }
+        if(meId) renderAll(); else renderLogin();
+      }
+    }
+  }catch(e){}
+}
+
+/* =====================================================
+   INIT
+   ===================================================== */
+async function init(){
+  // แสดงหน้าจอทันทีด้วยข้อมูลชั่วคราว แล้วซิงก์ของจริงเบื้องหลัง — แอปเปิดไว ไม่ค้างหน้าขาว
+  db = seedDb();
+  window.__booting = true;
+  // 🔒 ยังไม่มีรหัสเข้าก๊วนบนเครื่องนี้ — แสดงหน้าใส่รหัสทันที (ไม่โหลด/ไม่แสดงข้อมูลใดๆ)
+  if(gasUrl() && !clubKey()){
+    window.__booting = false;
+    renderLogin();
+    return;
+  }
+  renderLogin();
+  // 1) Google Sheet (ถ้ารู้ URL จากไฟล์/ลิงก์) → 2) Claude storage → 3) เริ่มใหม่
+  let loaded = null;
+  if(gasUrl()) loaded = await gasLoad();
+  if(!loaded){
+    const cs = await claudeLoad();
+    if(cs){
+      loaded = cs;
+      // ถ้าเคยตั้ง Google Sheet Sync ไว้ (เก็บใน settings) — สลับไปใช้ชีตเป็นหลัก
+      if(!window.__gasOverride && !GAS_URL && cs.settings && cs.settings.gasUrl){
+        window.__gasOverride = cs.settings.gasUrl;
+        const g = await gasLoad();
+        if(g && (g.rev||0) >= (cs.rev||0)) loaded = g;
+      }
+    }
+  }
+  window.__booting = false;
+  db = loaded || seedDb();
+  if(!loaded) await storeSave();
+  // one-time: ซิงก์รายชื่อสมาชิกชุดใหม่จากที่ Nu ปรับไว้ (ทำครั้งเดียวต่อฐานข้อมูล)
+  if((db.nameSyncV||0) < NAME_SYNC_V){
+    db.members.forEach(m=>{ if(NAME_SYNC[m.id]) m.name = NAME_SYNC[m.id]; });
+    NAME_SYNC_ADD.forEach(x=>{
+      if(!db.members.some(m=>m.id===x.id || m.name.toLowerCase()===x.name.toLowerCase()))
+        db.members.push({ id:x.id, name:x.name, emoji:x.emoji, pin:null, role:"member", baseW:0, baseL:0 });
+    });
+    db.nameSyncV = NAME_SYNC_V;
+    await storeSave();
+  }
+  // ensure admin + default manager always valid
+  const nu = db.members.find(m=>m.name===ADMIN_NAME);
+  if(nu && nu.role!=="admin"){ nu.role="admin"; }
+  if(!db.settings) db.settings = {};
+  if(!db.settings.defaultManagerId || !mem(db.settings.defaultManagerId)){
+    db.settings.defaultManagerId = nu? nu.id : (db.members[0]&&db.members[0].id);
+  }
+  // one-time: เพิ่มนัดตัวอย่างย้อนหลัง 4 ครั้ง (ลบทิ้งได้ ไม่กลับมาอีก)
+  if((db.mockV||0) < 2){
+    DEMO_SESSIONS.forEach(ds=>{
+      if(!db.sessions.some(s=>s.id===ds.id)) db.sessions.push(JSON.parse(JSON.stringify(ds)));
+    });
+    db.mockV = 2;
+    await storeSave();
+  }
+  // one-time: เพิ่มตัวอย่าง "แจ้งจ่ายเงินสด รออนุมัติ" ในนัดตัวอย่าง 6 ส.ค. (ให้ทดสอบปุ่มอนุมัติ)
+  if((db.mockV||0) < 3){
+    const ds = db.sessions.find(s=>s.id==="demo20260806");
+    if(ds && !(ds.paid && ds.paid.m5) && !(ds.payReq && ds.payReq.m5)){
+      if(!ds.payReq) ds.payReq = {};
+      ds.payReq.m5 = { method:"cash", at:1786452000000 };
+    }
+    db.mockV = 3;
+    await storeSave();
+  }
+  // one-time: ตั้ง Noi เป็นผู้จัดการ (ค่าเริ่มต้น) ตามที่ก๊วนกำหนด
+  if((db.flowV||0) < 1){
+    const noi = db.members.find(m=>m.id==="m7") || db.members.find(m=>m.name==="Noi");
+    if(noi) db.settings.defaultManagerId = noi.id;
+    db.flowV = 1;
+    await storeSave();
+  }
+  updateSyncBadge();
+  // จำการล็อกอินไว้ในเครื่อง — เข้าแอปใหม่ไม่ต้องใส่ PIN จนกว่าจะกด Log-out
+  const savedId = lsGet(LOGIN_KEY);
+  if(!meId && savedId && mem(savedId)){
+    meId = savedId;
+    $("loginView").style.display="none";
+    $("appView").style.display="block";
+    renderAll();
+    toast("สวัสดี "+nameOf(meId)+" "+emojiOf(meId)+" 🏸");
+  } else if(savedId && !mem(savedId)){
+    lsDel(LOGIN_KEY);
+  }
+  if(meId) renderAll(); else renderLogin();
+  setInterval(pollRemote, 15000);
+}
+init();
+/* PWA: service worker แบบเบาที่สุด เพื่อให้ติดตั้งเป็นแอปได้ (ไม่แคช — ได้เวอร์ชันใหม่เสมอ) */
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(function(){});
+}
+</script>
+</body>
+</html>
