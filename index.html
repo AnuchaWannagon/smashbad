@@ -325,7 +325,8 @@ const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก�
 const PLAYERS_PER_COURT = 4;
 const DEFAULT_COURT_PRICE = 100;   // ค่าคอร์ทเริ่มต้น (บาท/ชั่วโมง/คอร์ท)
 const DEFAULT_SHUTTLE_PRICE = 60;  // ค่าลูกแบดเริ่มต้น (บาท/ลูก)
-const EMOJIS = ["🏸","🦅","🐯","🔥","🚀","🎯","🐉","🦁","🐺","🦊","🐸","🦈","🌟","⚡","🥷","🐢","🦄","💥","🎾","🐝","🐨","🦖","🍀","🌈"];
+const EMOJIS = ["🏸","🦅","🐯","🔥","🚀","🎯","🐉","🦁","🐺","🦊","🐸","🦈","🌟","⚡","🥷","🐢","🦄","💥","🎾","🐝","🐨","🦖","🍀","🌈",
+  "🐼","🐧","🦉","🐬","🐙","🦋","🐞","🦜","🐳","🦔","🐊","🦎","🐍","🦂","🐘","🦍","🐎","🦌","⚽","🏀","🏐","🎱","🏆","👑","💎","🎮","🤖","👻","😎","🌊"];
 const SEED = [
   ["Tu",1,0],["Pae CK",2,1],["Lek",2,1],["Jack",2,1],["Mr.A",2,2],["Taeh Sarawut",2,2],
   ["Noi",2,2],["Pop_Kamon",2,2],["AnanJi III",1,2],["Nu",2,5],["JobJp",0,0],["Tumh",0,0],
@@ -561,6 +562,12 @@ function isAdmin(id){ const m = mem(id||meId); return m && m.role==="admin"; }
 function isDefaultMgr(id){ return db.settings.defaultManagerId === (id||meId); }
 function isMgrOf(s,id){ return s.managerId === (id||meId); }
 function canManage(s){ return isAdmin() || isMgrOf(s) ; }
+/* สิทธิ์แก้ไขเซ็ต: Admin แก้ได้ทุกเซ็ตทุกนัด (รวมนัดที่จบแล้ว) • ผู้จัดการนัด/ผู้บันทึกแก้ได้เฉพาะนัดที่ยังไม่จบ */
+function canEditSet(s, x){
+  if(isAdmin()) return true;
+  if(s.status==="done") return false;
+  return canManage(s) || (x && x.recordedBy===meId);
+}
 function canOpenSession(){ return isAdmin() || isDefaultMgr(); }
 function canDeleteMember(targetId){ return isAdmin() || isDefaultMgr() || targetId===meId; }
 function nameOf(id){ const m=mem(id); return m? m.name : "?"; }
@@ -735,7 +742,7 @@ function renderLogin(){
       <button class="btn btn-lime btn-block" id="ckBtn" onclick="submitClubKey()">🔓 เข้าก๊วน</button>`;
     return;
   }
-  if(!loginPick){
+  if(!loginPick && !signupMode){
     pinBuf=""; pinStage=null;
     p.innerHTML = `
       ${nextSessionBanner()}
@@ -1022,13 +1029,15 @@ function renderPlayingSession(s){
   const setList = [...(s.sets||[])].reverse().map(x=>{
     const w = setWinner(x);
     const canDel = canManage(s) || x.recordedBy===meId;
+    const canEd = canEditSet(s, x);
     return `<div class="set-card">
       <div class="set-teams">
         <div class="set-team ${w==="A"?"w":""}">${teamLabel(x.teamA)}</div>
         <div class="set-score">${x.scoreA} : ${x.scoreB}</div>
         <div class="set-team ${w==="B"?"w":""}">${teamLabel(x.teamB)}</div>
       </div>
-      <div class="set-meta">คอร์ท ${esc(x.court)} • บันทึกโดย ${emojiOf(x.recordedBy)} ${esc(nameOf(x.recordedBy))} ${x.shuttle?"• 🔄 เปลี่ยนลูก":""}
+      <div class="set-meta">คอร์ท ${esc(x.court)} • บันทึกโดย ${emojiOf(x.recordedBy)} ${esc(nameOf(x.recordedBy))} ${x.shuttle?"• 🔄 เปลี่ยนลูก":""}${x.editedBy?` • ✏️ แก้โดย ${emojiOf(x.editedBy)} ${esc(nameOf(x.editedBy))}`:""}
+        ${canEd? ` <span style="color:var(--blue); cursor:pointer; font-weight:700;" onclick="openEditSet('${s.id}','${x.id}')">✏️ แก้ไข</span>`:""}
         ${canDel? ` <span style="color:var(--coral); cursor:pointer; font-weight:700;" onclick="delSet('${s.id}','${x.id}')">✕ ลบ</span>`:""}
       </div>
     </div>`;
@@ -1132,6 +1141,90 @@ async function delSet(sid, setId){
   if(st && st.shuttle && (Number(s.shuttlesUsed)||0)>0) s.shuttlesUsed = Number(s.shuttlesUsed)-1;
   s.sets = s.sets.filter(x=>x.id!==setId);
   await storeSave(); renderAll();
+}
+
+/* ---------- แก้ไขเซ็ตที่บันทึกแล้ว (Admin ทุกเซ็ตทุกนัด • ผู้จัดการ/ผู้บันทึกแก้ในนัดที่ยังไม่จบ) ---------- */
+let editSetDraft = null;
+function openEditSet(sid, setId){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const x = (s.sets||[]).find(t=>t.id===setId); if(!x) return;
+  if(!canEditSet(s, x)) return toast("ไม่มีสิทธิ์แก้ไขเซ็ตนี้", true);
+  editSetDraft = { sid, setId, court:String(x.court||""), teamA:[...x.teamA], teamB:[...x.teamB],
+    scoreA:String(x.scoreA), scoreB:String(x.scoreB), shuttle:!!x.shuttle };
+  renderEditSetModal();
+}
+function renderEditSetModal(){
+  const d = editSetDraft; if(!d) return;
+  const s = db.sessions.find(x=>x.id===d.sid); if(!s) return;
+  // เลือกได้จากผู้ลงชื่อในนัด + คนที่อยู่ในเซ็ตเดิม (เผื่อถูกถอนชื่อไปแล้ว)
+  const ids = [...new Set([...s.attendees.map(a=>a.memberId), ...d.teamA, ...d.teamB])];
+  const chipRow = (team)=> ids.map(id=>{
+    const m = mem(id); if(!m) return "";
+    const arr = team==="A"? d.teamA : d.teamB;
+    const cls = arr.includes(id)? (team==="A"?"pa":"pb"):"";
+    return `<span class="chip ${cls}" onclick="pickEditSetTeam('${team}','${id}')"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
+  }).join("");
+  const courtSet = [...new Set([...(s.courts||[]).map(c=>String(c.no)), String(d.court)])].filter(Boolean);
+  const courtOpts = courtSet.map(no=>`<option value="${esc(no)}" ${String(d.court)===String(no)?"selected":""}>คอร์ท ${esc(no)}</option>`).join("");
+  modal(`
+    <div class="modal-head"><h3>✏️ แก้ไขเซ็ต</h3><button class="mclose" onclick="closeEditSet()">✕</button></div>
+    ${s.status==="done"? `<p class="muted" style="margin-top:0;">นัดนี้สรุปผลแล้ว — การแก้ไขจะอัปเดตสถิติและจำนวนลูกอัตโนมัติ</p>`:""}
+    <div class="field"><label>คอร์ทที่เล่น</label><select onchange="editSetDraft.court=this.value">${courtOpts||'<option value="">-</option>'}</select></div>
+    <div class="field"><label>ทีม A — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("A")}</div></div>
+    <div class="field"><label>ทีม B — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("B")}</div></div>
+    <div class="frow">
+      <div class="field"><label>คะแนนทีม A</label><input type="number" min="0" max="99" value="${d.scoreA}" oninput="editSetDraft.scoreA=this.value"></div>
+      <div class="field"><label>คะแนนทีม B</label><input type="number" min="0" max="99" value="${d.scoreB}" oninput="editSetDraft.scoreB=this.value"></div>
+    </div>
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="esShChk" style="width:auto;" ${d.shuttle?"checked":""} onchange="editSetDraft.shuttle=this.checked">
+      <label for="esShChk" style="margin:0;">เปลี่ยนลูกขนไก่ในเซ็ตนี้</label>
+    </div>
+    <button class="btn btn-lime btn-block" onclick="saveEditSet()">💾 บันทึกการแก้ไข</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeEditSet()">ยกเลิก</button>`);
+}
+function pickEditSetTeam(team, id){
+  const d = editSetDraft; if(!d) return;
+  const mine = team==="A"? d.teamA : d.teamB;
+  const other = team==="A"? d.teamB : d.teamA;
+  const oi = other.indexOf(id); if(oi>=0) other.splice(oi,1);
+  const i = mine.indexOf(id);
+  if(i>=0) mine.splice(i,1);
+  else if(mine.length<2) mine.push(id);
+  else { toast("ทีมละไม่เกิน 2 คน", true); return; }
+  renderEditSetModal();
+}
+function closeEditSet(){
+  const d = editSetDraft; editSetDraft = null;
+  if(d){
+    const s = db.sessions.find(x=>x.id===d.sid);
+    if(s && s.status==="done") return openSummary(d.sid);
+  }
+  closeModal();
+}
+async function saveEditSet(){
+  const d = editSetDraft; if(!d) return;
+  const s = db.sessions.find(x=>x.id===d.sid); if(!s) return;
+  const x = (s.sets||[]).find(t=>t.id===d.setId); if(!x) return;
+  if(!canEditSet(s, x)) return toast("ไม่มีสิทธิ์แก้ไขเซ็ตนี้", true);
+  if(d.teamA.length===0 || d.teamB.length===0) return toast("เลือกผู้เล่นทั้งสองทีมก่อน", true);
+  if(d.scoreA==="" || d.scoreB==="") return toast("กรอกคะแนนให้ครบทั้งสองทีม", true);
+  if(Number(d.scoreA)===Number(d.scoreB)) return toast("คะแนนเท่ากันไม่ได้ ต้องมีทีมชนะ", true);
+  if(!!d.shuttle !== !!x.shuttle){
+    if(d.shuttle) s.shuttlesUsed = (Number(s.shuttlesUsed)||0) + 1;
+    else if((Number(s.shuttlesUsed)||0) > 0) s.shuttlesUsed = Number(s.shuttlesUsed) - 1;
+  }
+  x.court = d.court || x.court;
+  x.teamA = [...d.teamA]; x.teamB = [...d.teamB];
+  x.scoreA = Number(d.scoreA); x.scoreB = Number(d.scoreB);
+  x.shuttle = !!d.shuttle;
+  x.editedBy = meId; x.editedAt = Date.now();
+  await storeSave();
+  editSetDraft = null;
+  renderAll();
+  if(s.status==="done") openSummary(s.id); else closeModal();
+  toast("บันทึกการแก้ไขเซ็ตแล้ว ✏️");
 }
 
 /* ---------- แถบปุ่มประจำขั้นตอน: ย้อนกลับ / บันทึก / แก้ไข ---------- */
@@ -1591,6 +1684,24 @@ function renderSummaryHtml(s){
         ${statRows || '<tr><td colspan="5" class="muted">ไม่มีข้อมูล</td></tr>'}
       </table>
     </div>
+
+    ${isAdmin() && (s.sets||[]).length? `
+    <div class="card" style="margin-bottom:12px;">
+      <h3>📜 เซ็ตทั้งหมด (${(s.sets||[]).length}) <span class="muted" style="font-weight:400; font-size:11px;">Admin แก้ไขได้</span></h3>
+      ${(s.sets||[]).map(x=>{
+        const w = setWinner(x);
+        return `<div class="set-card">
+          <div class="set-teams">
+            <div class="set-team ${w==="A"?"w":""}">${teamLabel(x.teamA)}</div>
+            <div class="set-score">${x.scoreA} : ${x.scoreB}</div>
+            <div class="set-team ${w==="B"?"w":""}">${teamLabel(x.teamB)}</div>
+          </div>
+          <div class="set-meta">คอร์ท ${esc(x.court)} • บันทึกโดย ${emojiOf(x.recordedBy)} ${esc(nameOf(x.recordedBy))}${x.shuttle?" • 🔄 เปลี่ยนลูก":""}${x.editedBy?` • ✏️ แก้โดย ${emojiOf(x.editedBy)} ${esc(nameOf(x.editedBy))}`:""}
+            <span style="color:var(--blue); cursor:pointer; font-weight:700;" onclick="openEditSet('${s.id}','${x.id}')">✏️ แก้ไข</span>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`:""}
 
     <button class="btn btn-lime btn-block" onclick="openPayment('${s.id}')">💰 หน้าการจ่ายเงิน — รวม ${money(totalCost(s))}</button>
     <div style="height:8px;"></div>
