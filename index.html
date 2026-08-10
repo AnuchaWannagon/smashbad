@@ -76,6 +76,24 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 .banner-approve{ background:rgba(62,213,152,.1); border:1px solid rgba(62,213,152,.5); color:var(--green); border-radius:12px; padding:10px 13px; font-size:12.5px; margin-bottom:12px; cursor:pointer; }
 .banner-due.nudged{ animation:pulseDue 1.6s ease-in-out infinite; }
 @keyframes pulseDue{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,107,94,0); } 50%{ box-shadow:0 0 0 4px rgba(255,107,94,.22); } }
+/* กระดานสื่อสารก๊วน */
+.board-row{ display:flex; gap:8px; align-items:stretch; margin-bottom:12px; }
+.banner-board{ flex:1; background:rgba(91,157,255,.12); border:1px solid rgba(91,157,255,.55); color:var(--ink); border-radius:12px; padding:10px 13px; font-size:12.5px; cursor:pointer; min-width:0; }
+.banner-board.blink{ animation:pulseBoard 1.5s ease-in-out infinite; }
+@keyframes pulseBoard{ 0%,100%{ box-shadow:0 0 0 0 rgba(91,157,255,0); border-color:rgba(91,157,255,.55); } 50%{ box-shadow:0 0 0 5px rgba(91,157,255,.28); border-color:rgba(91,157,255,.95); } }
+.board-write{ border:none; border-radius:12px; padding:0 13px; background:var(--lime); color:#10250b; font-weight:800; font-family:'Prompt',sans-serif; font-size:12.5px; cursor:pointer; white-space:nowrap; }
+.brd-msg{ border:1px solid var(--line); background:var(--card2); border-radius:11px; padding:8px 11px; margin-bottom:7px; font-size:13px; }
+.brd-msg.own{ border-color:rgba(198,242,78,.45); }
+.brd-msg.ann{ border-color:rgba(91,157,255,.6); background:rgba(91,157,255,.08); }
+.brd-head{ display:flex; gap:6px; align-items:center; font-size:11.5px; color:var(--ink-soft); margin-bottom:3px; }
+.brd-head b{ color:var(--ink); }
+/* รายชื่อผู้ลงชื่อ (หน้าแรก) */
+.att-list{ margin-top:12px; }
+.att-row{ display:flex; align-items:center; gap:8px; padding:8px 11px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.03); margin-bottom:6px; font-size:13.5px; }
+.att-row.me{ border-color:rgba(198,242,78,.55); cursor:pointer; }
+.att-row .no{ min-width:18px; text-align:right; color:var(--ink-soft); font-size:11px; }
+.att-row .nm{ font-weight:700; white-space:nowrap; }
+.att-row .nt{ flex:1; text-align:right; font-size:12px; color:var(--amber); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* ตัวบอกว่าแอปกำลังทำงาน (ซิงก์เบื้องหลัง) */
 .spin{ display:inline-block; animation:spinCw 1.4s linear infinite; }
 @keyframes spinCw{ to{ transform:rotate(360deg); } }
@@ -263,7 +281,8 @@ table.tbl tr:last-child td{ border-bottom:none; }
 <body>
 
 <!-- ================= LOGIN ================= -->
-<div id="loginView">
+<div id="loginView" style="position:relative;">
+  <button class="exitbtn" style="position:absolute; top:12px; right:12px;" onclick="toggleLang()" title="Switch language / สลับภาษา">🌐<span class="langLbl">EN</span></button>
   <div class="logo-badge">🏸</div>
   <h1>Smash Badminton</h1>
   <div class="sub">ก๊วนแบดตบกระจาย — ลงชื่อเข้าใช้เพื่อเข้าร่วมนัดตี</div>
@@ -281,6 +300,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
       <div><div class="b-t">Smash Badminton</div><div class="b-s">ก๊วนแบดตบกระจาย</div></div>
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
+      <button class="exitbtn" onclick="toggleLang()" title="Switch language / สลับภาษา">🌐<span class="langLbl">EN</span></button>
       <div class="mecap" onclick="openProfile()" id="meCap"></div>
       <button class="exitbtn" onclick="confirmLogout()" title="ออกจากแอป">🚪<span>Log-out</span></button>
     </div>
@@ -549,12 +569,536 @@ function seedDb(){
     baseW:s[1], baseL:s[2]
   }));
   const admin = members.find(m=>m.name===ADMIN_NAME);
-  return { rev:0, nameSyncV: NAME_SYNC_V, members, sessions:[], settings:{ defaultManagerId: admin?admin.id:members[0].id } };
+  return { rev:0, nameSyncV: NAME_SYNC_V, members, sessions:[], board:[], settings:{ defaultManagerId: admin?admin.id:members[0].id } };
 }
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+/* =====================================================
+   i18n — สลับภาษาไทย/อังกฤษทั้งแอป
+   หลักการ: โค้ดเขียนเป็นภาษาไทย (ต้นฉบับ) → เมื่อ LANG==="en"
+   ตัวแปล t() + translateDom() จะแทนที่วลีไทยด้วยอังกฤษหลัง render
+   ===================================================== */
+const LANG_LS = "smash-lang";
+let LANG = lsGet(LANG_LS) || "th";
+function loc(){ return LANG==="en" ? "en-GB" : "th" + "-TH"; }
+function setLang(l){
+  LANG = (l==="en"?"en":"th"); lsSet(LANG_LS, LANG);
+  try{ document.documentElement.lang = LANG; }catch(e){}
+  document.querySelectorAll(".langLbl").forEach(el=> el.textContent = LANG==="en" ? "ไทย" : "EN");
+  if(typeof meId!=="undefined" && meId){ renderAll(); } else { try{ renderLogin(); }catch(e){} }
+}
+function toggleLang(){ setLang(LANG==="en" ? "th" : "en"); }
+
+/* วลีไทย → อังกฤษ (เรียงยาว→สั้นตอนสร้าง regex เพื่อกันชนกัน) */
+const I18N = {
+"ก๊วนแบดตบกระจาย — ลงชื่อเข้าใช้เพื่อเข้าร่วมนัดตี":"Badminton crew — log in to join the sessions",
+"กำลังเปิดแอป":"Starting app",
+"เตรียมข้อมูลก๊วนแป๊บนึง…":"Preparing club data…",
+"ก๊วนแบดตบกระจาย":"Smash-happy badminton crew",
+"ออกจากแอป (Log-out) ตอนนี้?":"Log out now?",
+"ครั้งถัดไปต้องใส่ PIN ใหม่":"You'll need your PIN next time",
+"ออกจากแอป":"Log out",
+"⚠️ โหมดทดลอง: ระบบบันทึกข้อมูลกลางใช้ไม่ได้ ข้อมูลจะหายเมื่อปิดหน้า":"⚠️ Trial mode: central storage unavailable — data is lost when this page closes",
+"กรุณาใส่รหัสเข้าก๊วน":"Please enter the club key",
+"มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว ลองทำรายการอีกครั้ง":"Newer data arrived from clubmates — updated. Please redo your action",
+"⚠️ ซิงก์ Google Sheet ไม่สำเร็จ — จะลองใหม่ในการบันทึกครั้งถัดไป":"⚠️ Google Sheet sync failed — will retry on next save",
+"☁️ Google Sheet (อัตโนมัติ)":"☁️ Google Sheet (automatic)",
+"⚠️ Google Sheet — เชื่อมต่อไม่ได้":"⚠️ Google Sheet — cannot connect",
+"💾 ที่เก็บข้อมูลกลางของ Claude":"💾 Claude central storage",
+"🚫 โหมดทดลอง":"🚫 Trial mode",
+"⚠️ ซิงก์ไม่สำเร็จชั่วคราว — จะลองใหม่อัตโนมัติ •":"⚠️ Sync temporarily failed — will retry automatically •",
+"แตะดูรายละเอียด":"tap for details",
+"⚠️ โหมดทดลอง —":"⚠️ Trial mode —",
+"☁️ สถานะการเชื่อมต่อข้อมูล":"☁️ Data connection status",
+"สถานะตอนนี้":"Current status",
+"แอปอ่านและบันทึกข้อมูลลง Google Sheet ให้อัตโนมัติทุกครั้งที่มีการแก้ไข และดึงข้อมูลใหม่จากเพื่อนทุก 15 วินาที — ไม่ต้องกดอะไรเพิ่ม":"The app saves every change to Google Sheet automatically and pulls updates from clubmates every 15 seconds — nothing extra to do",
+"ถ้าซิงก์ไม่สำเร็จ: เช็คอินเทอร์เน็ต แล้วกด":"If sync fails: check the internet, then tap",
+"🔄 ลองเชื่อมต่อใหม่":"🔄 Reconnect",
+"ลองเชื่อมต่อใหม่":"Reconnect",
+"ข้อมูลที่ค้างจะถูกส่งให้เองในการบันทึกครั้งถัดไป":"Pending data is sent automatically on the next save",
+"⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)":"⚙️ Connection settings (Admin/Manager)",
+"◀️ ย้อนกลับ (ไม่บันทึก)":"◀️ Back (don't save)",
+"◀️ ย้อนกลับ":"◀️ Back",
+"กำลังเชื่อมต่อ…":"Connecting…",
+"☁️ เชื่อมต่อสำเร็จ ข้อมูลซิงก์แล้ว":"☁️ Connected — data synced",
+"ยังเชื่อมต่อไม่ได้ — จะลองใหม่อัตโนมัติ":"Still can't connect — will retry automatically",
+"รอผู้จัดการเปิดคอร์ท (ขั้นที่ 3) ก่อน — แล้วทุกคนจะบันทึกเซ็ตได้ที่ขั้นนี้":"Wait for the manager to open courts (step 3) — then everyone can record sets here",
+"เฉพาะ Admin หรือผู้จัดการนัดที่แก้ไขขั้นตอนได้":"Only Admin or the session manager can change steps",
+"อยู่ในขั้นลงชื่อแล้ว — แตะขั้นที่ 1 เพื่อแก้กำหนดการ":"Already at sign-up — tap step 1 to edit the schedule",
+"ต้องเริ่มตี (ขั้นที่ 4) ก่อน จึงจะสรุปผลได้":"Start playing (step 4) before finishing",
+"📅 รายละเอียดนัดตีครั้งต่อไป":"📅 Next session details",
+"📅 นัดตีครั้งต่อไป":"📅 Next session",
+"กำลังโหลดข้อมูลนัดล่าสุด":"Loading the latest session",
+"ยังไม่มีนัดที่เปิดอยู่ — รอ Admin/ผู้จัดการกำหนดวันตี":"No open session — waiting for Admin/Manager to set a date",
+"เปิดรับลงชื่อล่วงหน้า":"open for sign-up",
+"เปิดรับลงชื่อ":"Open for sign-up",
+"กำลังตี":"Playing",
+"🙋 ลงชื่อเข้าตีแล้ว":"🙋 Signed up",
+"แนะนำจอง":"book",
+"👁️ แตะเพื่อดูรายละเอียดและรายชื่อผู้ลงชื่อ":"👁️ Tap for details and the sign-up list",
+"🕐 กำลังโหลดข้อมูลนัด รอสักครู่…":"🕐 Loading session data…",
+"วันที่ตี":"Date",
+"เลือกวันที่ก่อน":"Pick a date first",
+"วันที่":"Date",
+"ยังไม่ระบุสถานที่":"Venue TBD",
+"สถานที่":"Venue",
+"ยังไม่ระบุ":"TBD",
+"ช่วงเวลา":"Time",
+"เวลา":"Time",
+"ผู้จัดการนัดนี้ (มอบหมายแทนได้)":"Session manager (can delegate)",
+"ผู้จัดการนัดนี้":"Session manager",
+"ผู้จัดการนัดจะเป็นคนกด":"The session manager taps",
+"ผู้จัดการนัด":"Session manager",
+"คอร์ทที่แนะนำให้จอง":"Courts to book",
+"คอร์ทที่ควรจอง":"Courts to book",
+"คอร์ทที่เล่น":"Court",
+"คน/คอร์ท":"per court",
+"ล็อกอินด้วยชื่อของคุณเพื่อลงชื่อเข้าร่วมนัดนี้":"Log in with your name to join this session",
+"ใส่รหัสเข้าก๊วนก่อนนะ":"Enter the club key first",
+"🕐 กำลังตรวจสอบ…":"🕐 Checking…",
+"ยินดีต้อนรับเข้าก๊วน 🏸":"Welcome to the club 🏸",
+"🔓 เข้าก๊วน":"🔓 Enter club",
+"รหัสไม่ถูกต้อง หรือเชื่อมต่อไม่ได้ — ลองอีกครั้ง":"Wrong key or connection failed — try again",
+"เฉพาะสมาชิกก๊วน":"Club members only",
+"ใส่รหัสเข้าก๊วน — ขอได้จาก Admin หรือในกลุ่ม LINE ของก๊วน":"Enter the club key — ask the Admin or check the club's LINE group",
+"ใส่ครั้งเดียว เครื่องนี้จะจำไว้":"enter once — this device remembers it",
+"รหัสเข้าก๊วน":"Club key",
+"แอปทำงานอยู่ — กำลังซิงก์ข้อมูลล่าสุดจากก๊วน":"App is running — syncing the latest club data",
+"แตะชื่อของคุณเพื่อเข้าสู่ระบบ (Admin, ผู้จัดการ, แล้วเรียงตามตัวอักษร)":"Tap your name to log in (Admin, Manager, then A-Z)",
+"🙋 สมาชิกใหม่ — สมัคร & เข้าร่วมก๊วน":"🙋 New member — sign up & join",
+"⚠️ ยังไม่ได้เชื่อมระบบเก็บข้อมูลกลาง — ข้อมูลจะไม่ถูกแชร์ (ตั้งค่า Google Sheet Sync ได้หลังล็อกอิน)":"⚠️ Central storage not connected — data won't be shared (set up Google Sheet Sync after login)",
+"สมัครสมาชิกใหม่":"New member sign-up",
+"ใส่ชื่อเล่น เลือกไอคอน แล้วตั้ง PIN — เสร็จแล้วลงชื่อเข้าร่วมนัดตีได้ทันที":"Enter a nickname, pick an icon, set a PIN — then join sessions right away",
+"ชื่อเล่น":"Nickname",
+"เช่น เอก, มด, พี่หนุ่ม":"e.g. Ake, Mod, JJ",
+"ไอคอนประจำตัว":"Your icon",
+"สมัคร & ตั้ง PIN":"Sign up & set PIN",
+"ตั้งรหัส PIN ครั้งแรก":"Set your PIN (first time)",
+"ตั้ง PIN 4 หลักสำหรับ":"Set a 4-digit PIN for",
+"ใช้ล็อกอินครั้งต่อไป":"— used for future logins",
+"ยืนยัน PIN อีกครั้ง":"Confirm your PIN",
+"กรอก PIN เดิมซ้ำเพื่อยืนยัน":"Re-enter the same PIN to confirm",
+"กรอกรหัส PIN":"Enter your PIN",
+"PIN 4 หลักของ":"4-digit PIN of",
+"🕐 กำลังซิงก์ข้อมูลล่าสุด รออีกนิดเดียว…":"🕐 Syncing the latest data — one moment…",
+"กรอกชื่อเล่นก่อนนะ":"Enter a nickname first",
+"มีชื่อนี้ในก๊วนแล้ว — ถ้าเป็นคุณ แตะชื่อเพื่อล็อกอินได้เลย":"That name already exists — if it's you, tap it to log in",
+"มีชื่อนี้ในก๊วนแล้ว":"That name already exists",
+"ยินดีต้อนรับ":"Welcome",
+"— ตั้ง PIN 4 หลักต่อเลย":"— now set your 4-digit PIN",
+"PIN ไม่ตรงกัน ลองใหม่อีกครั้ง":"PINs don't match — try again",
+"PIN ไม่ถูกต้อง":"Wrong PIN",
+"สวัสดี":"Hi",
+"รอผู้จัดการอนุมัติ":"Waiting for manager approval",
+"มีการแจ้งชำระเงินรออนุมัติ":"Payments waiting for approval:",
+"— แตะเพื่อตรวจและกดอนุมัติ":"— tap to review & approve",
+"ยังไม่มีนัดตีที่เปิดอยู่":"No open session yet",
+"ขั้นที่ 1: กำหนดวันตีและสถานที่ เพื่อเปิดให้สมาชิกลงชื่อล่วงหน้า":"Step 1: set the date & venue so members can sign up in advance",
+"รอ Admin หรือผู้จัดการเปิดนัดถัดไป":"Waiting for Admin or Manager to open the next session",
+"📅 กำหนดวันตี & เปิดนัดใหม่":"📅 Set a date & open a new session",
+"สรุปนัดที่ผ่านมา":"Past sessions",
+"ประวัติการจ่ายเงินทั้งหมด":"Full payment history",
+"ประวัติการจ่ายเงิน":"Payment history",
+"ยังไม่มีประวัติการจ่ายเงิน":"No payments yet",
+"ความคิดเห็น":"Feedback",
+"จัดการก๊วน":"Manage club",
+"ยังไม่มีนัดที่จบ":"No finished sessions yet",
+"✍️ ส่งความคิดเห็น":"✍️ Send feedback",
+"📥 กล่องความคิดเห็น":"📥 Feedback inbox",
+"ผู้จัดการ (ค่าเริ่มต้น) คือคนที่เปิดนัด จองคอร์ท กรอกข้อมูลคอร์ท และกดสรุปผลได้ — ค่าเริ่มต้นคือ Nu และมอบหมายให้คนอื่นแทนได้":"The default manager opens sessions, books courts, fills court info and finishes sessions — default is Nu, and it can be delegated",
+"ผู้จัดการ (ค่าเริ่มต้น)":"Default manager",
+"การเก็บข้อมูล (อัตโนมัติ)":"Storage (automatic)",
+"📅 เปิดนัดตีใหม่ / เพิ่มนัด":"📅 Open a new session",
+"👑 มอบหมายผู้จัดการ":"👑 Delegate manager",
+"☁️ การเชื่อมต่อ & ซิงก์":"☁️ Connection & sync",
+"📥 บันทึกไฟล์ Excel":"📥 Export Excel file",
+"📤 นำเข้าจากไฟล์ Excel":"📤 Import from Excel",
+"📤 นำเข้าข้อมูลจาก Excel สำเร็จ":"📤 Imported from Excel",
+"แก้ไขนัดตี":"Edit session",
+"แก้ไขนัด":"Edit session",
+"✓ ลงชื่อแล้ว — แตะเพื่อถอนชื่อ":"✓ Signed up — tap to withdraw",
+"🙋 ลงชื่อเข้าร่วมนัดนี้":"🙋 Sign up for this session",
+"ลงชื่อแล้ว (คน)":"Signed up",
+"📋 คัดลอกประกาศนัด → วางในไลน์กลุ่ม":"📋 Copy announcement → paste in LINE",
+"📣 สำหรับผู้จัดการ: ตอนนี้ลงชื่อแล้ว":"📣 For the manager: signed up so far",
+"→ จองคอร์ทล่วงหน้า":"→ book",
+"ให้เพียงพอ • ข้อมูลคอร์ท (เลขคอร์ท/ชั่วโมง/ราคา) ค่อยกรอกทีหลังตอนถึงวันตี":"in advance • court details (number/hours/price) can wait until match day",
+"🏟️ ขั้นที่ 3: เปิดคอร์ท → เริ่มตี (ทำเมื่อถึงวันตี)":"🏟️ Step 3: open courts → start playing (on match day)",
+"🙋 สรุปผู้ลงชื่อเข้าร่วม":"🙋 Players signed up",
+"ยังไม่มีใครลงชื่อ — เป็นคนแรกเลย!":"No one yet — be the first!",
+"ยังไม่มีใครลงชื่อ":"No one signed up yet",
+"✏️ แก้ไขการลงชื่อ (ลงชื่อแทน / ถอนชื่อสมาชิก)":"✏️ Edit sign-ups (sign up / withdraw for others)",
+"— แตะชื่อตัวเองเพื่อเขียนข้อความสั้นๆ":"— tap your own name to add a short note",
+"✏️ แตะเพื่อเขียนโน้ต…":"✏️ tap to add a note…",
+"📝 ข้อความของฉันในนัดนี้":"📝 My note for this session",
+"ข้อความสั้นๆ จะแสดงข้างชื่อคุณในรายชื่อผู้ลงชื่อ เช่น ไปถึง 19.00 / รับเพื่อนได้ 1 คน":"A short note shown beside your name in the sign-up list, e.g. arriving 19.00 / can give 1 friend a ride",
+"💾 บันทึกข้อความ":"💾 Save note",
+"ลบข้อความ":"Remove note",
+"บันทึกข้อความแล้ว":"Note saved",
+"ลบข้อความแล้ว":"Note removed",
+"ลงชื่อก่อนจึงเขียนข้อความได้":"Sign up first to add a note",
+"📢 กระดานสื่อสารก๊วน":"📢 Club message board",
+"ยังไม่มีประกาศจากผู้จัดการ — แตะเพื่อเปิดกระดานสื่อสารก๊วน":"No announcements yet — tap to open the club board",
+"✍️ เขียน":"✍️ Write",
+"พิมพ์ข้อความถึงก๊วน…":"Message the club…",
+"📨 ส่งข้อความ":"📨 Send",
+"ส่งข้อความแล้ว 📨":"Message sent 📨",
+"ลบข้อความนี้?":"Delete this message?",
+"ยังไม่มีข้อความ — เริ่มคุยกันเลย":"No messages yet — start the conversation",
+"ประกาศ":"ANNOUNCE",
+"Admin/ผู้จัดการเขียนแล้วจะขึ้นเป็นประกาศกระพริบบนหน้าแรกของทุกคน":"Messages from Admin/Manager appear as the blinking announcement on everyone's home screen",
+"• บันทึกโดย":"• recorded by",
+"• 🔄 เปลี่ยนลูก":"• 🔄 new shuttle",
+"• ✏️ แก้โดย":"• ✏️ edited by",
+"✏️ แก้ไขเซ็ต":"✏️ Edit set",
+"✏️ แก้ไขการลงชื่อ":"✏️ Edit sign-ups",
+"✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก":"✏️ Edit court / shuttle costs",
+"✏️ แก้ไขข้อมูลสมาชิก (โดย Admin)":"✏️ Edit member (by Admin)",
+"✏️ แก้ไข (เปิดนัดกลับ)":"✏️ Edit (reopen session)",
+"✏️ แก้ไข":"✏️ Edit",
+"✕ ลบ":"✕ Delete",
+"ยังไม่มีเซ็ตที่บันทึก — เริ่มบันทึกเซ็ตแรกกันเลย":"No sets yet — record the first one!",
+"ยังไม่มีเซ็ตที่บันทึกไว้":"No sets recorded",
+"ยังไม่มีเซ็ตที่บันทึก":"No sets recorded yet",
+"● ขั้นที่ 4: กำลังตี — บันทึกเซ็ตกันเลย":"● Step 4: playing — record those sets!",
+"● ขั้นที่ 2: เปิดรับลงชื่อล่วงหน้า":"● Step 2: open for sign-up",
+"แก้ข้อมูลคอร์ท":"Edit court info",
+"เซ็ตที่ตีแล้ว":"Sets played",
+"🏸 บันทึกเซ็ต — ใส่ผลตีรอบนี้":"🏸 Record a set — enter this round's result",
+"🏁 ขั้นที่ 5: สรุปผล — จบนัดนี้":"🏁 Step 5: finish this session",
+"เมื่อเลิกตี":"when play ends",
+"🏟️ ขั้นที่ 3: เปิดคอร์ท & เริ่มตี":"🏟️ Step 3: open courts & start playing",
+"🏟️ ข้อมูลคอร์ท":"🏟️ Court info",
+"ยังไม่กรอกข้อมูลคอร์ท":"No court info yet",
+"ค่าลูกขนไก่":"Shuttles",
+"✍️ บันทึกเซ็ต":"✍️ Record a set",
+"สมาชิกที่มาตีช่วยกันบันทึกได้":"any attendee can record",
+"✏️ เพิ่ม / แก้ไขคนเข้าตี (ตอนนี้":"✏️ Add / edit players (currently",
+"เฉพาะผู้ที่ลงชื่อเข้าร่วมนัดนี้จึงบันทึกผลได้":"Only attendees of this session can record results",
+"📜 เซ็ตทั้งหมด":"📜 All sets",
+"📜 เซ็ตย้อนหลัง":"📜 Recent sets",
+"📋 คัดลอกผลสด → วางในไลน์กลุ่ม":"📋 Copy live results → paste in LINE",
+"ทีม A — แตะเลือก 1-2 คน":"Team A — tap to pick 1-2",
+"ทีม B — แตะเลือก 1-2 คน":"Team B — tap to pick 1-2",
+"คะแนนทีม A":"Team A score",
+"คะแนนทีม B":"Team B score",
+"เปลี่ยนลูกขนไก่ในเซ็ตนี้":"New shuttle used this set",
+"+ บันทึกเซ็ตนี้":"+ Save this set",
+"ทีมละไม่เกิน 2 คน":"Max 2 per team",
+"เลือกผู้เล่นทั้งสองทีมก่อน":"Pick players for both teams first",
+"กรอกคะแนนให้ครบทั้งสองทีม":"Enter scores for both teams",
+"คะแนนเท่ากันไม่ได้ ต้องมีทีมชนะ":"Scores can't be equal — one team must win",
+"บันทึกเซ็ตแล้ว 🏸":"Set saved 🏸",
+"ไม่มีสิทธิ์ลบเซ็ตนี้":"No permission to delete this set",
+"ลบเซ็ตนี้?":"Delete this set?",
+"ไม่มีสิทธิ์แก้ไขเซ็ตนี้":"No permission to edit this set",
+"นัดนี้สรุปผลแล้ว — การแก้ไขจะอัปเดตสถิติและจำนวนลูกอัตโนมัติ":"This session is finished — edits update stats and shuttle counts automatically",
+"💾 บันทึกการแก้ไข":"💾 Save changes",
+"บันทึกการแก้ไขเซ็ตแล้ว ✏️":"Set updated ✏️",
+"💾 บันทึกและซิงก์ข้อมูลแล้ว":"💾 Saved & synced",
+"💾 บันทึก — เปิดนัดให้สมาชิกลงชื่อ":"💾 Save — open for sign-up",
+"💾 บันทึก & เริ่มตี!":"💾 Save & start playing!",
+"💾 บันทึกข้อมูลคอร์ท":"💾 Save court info",
+"💾 บันทึก":"💾 Save",
+"ย้อนกลับไปขั้นที่ 2 (เปิดรับลงชื่อ)?":"Go back to step 2 (sign-up)?",
+"ข้อมูลคอร์ทและเซ็ตที่บันทึกไว้ยังอยู่ครบ":"Court data and recorded sets are kept",
+"◀️ กลับสู่ขั้นเปิดรับลงชื่อแล้ว":"◀️ Back at the sign-up stage",
+"ย้อนกลับจากขั้นนี้ = ยกเลิกนัดนี้ทั้งหมด":"Going back from here = cancelling this session entirely",
+"ยืนยันยกเลิกนัด?":"Confirm cancelling?",
+"ยกเลิกนัดแล้ว":"Session cancelled",
+"เปิดนัดนี้กลับเป็นสถานะ":"Reopen this session to",
+"เพื่อแก้ไขข้อมูล?":"to edit its data?",
+"↩️ เปิดนัดกลับมาแก้ไขได้แล้ว":"↩️ Session reopened for editing",
+"🔒 มีเซ็ตบันทึกแล้ว":"🔒 has recorded sets",
+"✓ ร่วมตี":"✓ playing",
+"− ถอนชื่อ":"− withdraw",
+"+ ลงชื่อ":"+ sign up",
+"— แตะ":"— tap",
+"เพื่อลงชื่อแทนเพื่อน หรือ":"to sign a friend up, or",
+"เพื่อถอนออก":"to withdraw them",
+"คนที่มีผลเซ็ตบันทึกแล้วจะถอนชื่อไม่ได้ (ต้องลบเซ็ตนั้นก่อน)":"Players with recorded sets can't be withdrawn (delete those sets first)",
+"✓ เสร็จแล้ว":"✓ Done",
+"มีผลเซ็ตของ":"There are recorded sets for",
+"บันทึกไว้ — ต้องลบเซ็ตนั้นก่อนจึงถอนชื่อได้":"— delete them first to withdraw",
+"ยืนยันถอนชื่อออกจากนัดวันที่":"Confirm withdrawing from the session on",
+"ถอนชื่อออกจากนัดแล้ว":"Withdrawn from the session",
+"ถอนชื่อ":"Withdraw",
+"ออกจากนัดวันที่":"from the session on",
+"เข้าร่วมแล้ว 🙌":"joined 🙌",
+"ลงชื่อเข้าร่วมแล้ว 🙌":"Signed up 🙌",
+"เฉพาะ Admin หรือผู้จัดการที่เปิดนัดได้":"Only Admin or Manager can open a session",
+"เฉพาะ Admin หรือผู้จัดการที่นำเข้าข้อมูลได้":"Only Admin or Manager can import data",
+"(ค่าเริ่มต้น)":"(default)",
+"ค่าเริ่มต้น)":"default)",
+"📅 ขั้นที่ 1: กำหนดวันตี & เปิดนัด":"📅 Step 1: set a date & open the session",
+"กำหนดแค่วัน สถานที่ และเวลา — ยังไม่ต้องมีข้อมูลคอร์ท รอดูยอดคนลงชื่อก่อนแล้วค่อยจองคอร์ทให้พอดี":"Just set the date, venue and time — book courts later once you see how many sign up",
+"เช่น ยิม4 มธ.":"e.g. TU Gym 4",
+"เช่น 18.00-20.00":"e.g. 18.00-20.00",
+"เปิดนัดแล้ว 📣 บอกเพื่อนๆ มาลงชื่อได้เลย":"Session opened 📣 tell everyone to sign up",
+"ลบนัดนี้ทั้งหมด":"Delete this session",
+"บันทึกแล้ว":"Saved",
+"ลบนัดนี้และข้อมูลทั้งหมดของนัด?":"Delete this session and all its data?",
+"เมื่อเชื่อมต่อแล้ว ทุกการแก้ไขจะถูกบันทึกลง Google Sheet":"Once connected, every change is saved to the Google Sheet",
+"ใน Google Drive อัตโนมัติ และสมาชิกทุกคนเห็นข้อมูลเดียวกัน":"in Google Drive automatically, and all members see the same data",
+"ทำครั้งเดียว: เปิด Google Sheet → ส่วนขยาย → Apps Script → วางโค้ดจากไฟล์":"One-time: open the Google Sheet → Extensions → Apps Script → paste the code from",
+"→ Deploy เป็น Web app (Execute as: Me, Access: Anyone) → คัดลอก URL มาวางด้านล่าง (ขั้นตอนละเอียดอยู่ใน README)":"→ Deploy as Web app (Execute as: Me, Access: Anyone) → copy the URL below (details in README)",
+"Web App URL (ลงท้ายด้วย /exec)":"Web App URL (ending in /exec)",
+"เชื่อมต่อ & บันทึก":"Connect & save",
+"ยกเลิกการเชื่อมต่อ Google Sheet แล้ว":"Google Sheet disconnected",
+"ยกเลิกการเชื่อมต่อ":"Disconnect",
+"URL ต้องขึ้นต้นด้วย https://script.google.com/":"URL must start with https://script.google.com/",
+"กำลังทดสอบการเชื่อมต่อ…":"Testing connection…",
+"เชื่อมต่อไม่สำเร็จ — ตรวจว่า Deploy แบบ":"Connection failed — check it's deployed with",
+"และใช้ URL ที่ลงท้ายด้วย /exec":"and the URL ends in /exec",
+"☁️ เชื่อมต่อ Google Sheet สำเร็จ! ข้อมูลจะซิงก์อัตโนมัติ":"☁️ Google Sheet connected! Data will sync automatically",
+"💬 ส่งความคิดเห็นถึง Admi":"💬 Send feedback to Admi",
+"ข้อเสนอแนะการใช้งาน สิ่งที่อยากให้แก้ไข หรือไอเดียพัฒนา App — ส่งตรงถึง Nu (Admin)":"Suggestions, fixes or ideas for the app — sent straight to Nu (Admin)",
+"ข้อความของคุณ":"Your message",
+"เช่น อยากให้เพิ่ม... / เจอปัญหาตรงที่...":"e.g. I'd like... / I found a problem with...",
+"📨 ส่งถึง Admi":"📨 Send to Admi",
+"พิมพ์ข้อความก่อนนะ":"Type a message first",
+"📨 ส่งความคิดเห็นถึง Admin แล้ว ขอบคุณครับ 🙏":"📨 Feedback sent to Admin — thank you 🙏",
+"ยังไม่มีความคิดเห็นเข้ามา":"No feedback yet",
+"ลบความคิดเห็นนี้?":"Delete this feedback?",
+"มอบหมายผู้จัดการนัดตี":"Delegate the session manager",
+"เลือกผู้จัดการ":"Choose a manager",
+"มอบหมายให้":"Delegated to",
+"เป็นผู้จัดการแล้ว":"as manager",
+"+ เพิ่มคอร์ท":"+ Add court",
+"ราคาลูกขนไก่ / ลูก":"Shuttle price / shuttle",
+"จำนวนลูกที่ใช้ (เพิ่มอัตโนมัติเมื่อติ๊ก":"Shuttles used (auto-counts when ticking",
+"เปลี่ยนลูก":"new shuttle",
+"คอร์ทที่":"Court #",
+"ชั่วโมงเล่น":"Hours played",
+"ชั่วโมง":"Hours",
+"ราคา/ชม. (฿)":"Price/hr (฿)",
+"ใส่ข้อมูลอย่างน้อย 1 คอร์ท":"Enter at least 1 court",
+"เริ่มตีได้เลย! ช่วยกันบันทึกเซ็ตนะ 🏸":"Play on! Help record the sets 🏸",
+"บันทึกตัวเลขค่าใช้จ่ายแล้ว":"Costs saved",
+"จบนัดนี้และไปหน้าสรุปผล?":"Finish this session and go to the summary?",
+"จบแล้ว":"Finished",
+"📊 สรุปผลนัด":"📊 Session summary —",
+"• ผู้จัดการนัด":"• session manager",
+"• ผู้จัดการ":"• manager",
+"MVP ประจำนัด":"Session MVP",
+"เซ็ตทั้งหมด":"Total sets",
+"📊 สถิติรายคน":"📊 Player stats",
+"ลูกที่ใช้":"Shuttles used",
+"ไม่มีข้อมูล":"No data",
+"Admin แก้ไขได้":"Admin can edit",
+"💰 หน้าการจ่ายเงิน — รวม":"💰 Payments — total",
+"📋 คัดลอกสรุปผล → วางในไลน์กลุ่ม":"📋 Copy summary → paste in LINE",
+"จ่ายแล้ว ✓":"Paid ✓",
+"ดูสลิป":"View slip",
+"⏳ รออนุมัติ":"⏳ Pending",
+"ยังไม่จ่าย":"Unpaid",
+"💰 การชำระของฉัน —":"💰 My payment —",
+"💰 การชำระของฉัน":"💰 My payment",
+"แจ้งโอนเงิน (แนบสลิป)แล้ว — รอผู้จัดการกดอนุมัติ":"Transfer reported (slip attached) — waiting for approval",
+"แจ้งจ่ายเงินสดแล้ว — รอผู้จัดการกดอนุมัติ":"Cash payment reported — waiting for approval",
+"จ่ายเงินสด":"cash",
+"โอนเงิน (แนบสลิป)":"transfer (slip)",
+"แล้ว — รอผู้จัดการกดอนุมัติ":"— waiting for the manager to approve",
+"👁️ ดูรายละเอียด":"👁️ Details",
+"ยกเลิกคำขอ":"Cancel request",
+"🧾 แนบสลิปโอนเงิน":"🧾 Attach transfer slip",
+"💵 แจ้งจ่ายเงินสด":"💵 Report cash payment",
+"แนบสลิปแล้วระบบจะอ่านยอดเงินให้อัตโนมัติ จากนั้นผู้จัดการกดอนุมัติ":"Attach a slip and the amount is read automatically, then the manager approves",
+"💰 การจ่ายเงิน — นัด":"💰 Payments — session",
+"ค่าใช้จ่ายรวมทั้งนัด":"Total session cost",
+"• จ่ายแล้ว":"• paid",
+"จ่ายแล้ว":"Paid",
+"หารตามชั่วโมง":"Split by hours",
+"หารเท่ากัน":"Split equally",
+"⏱️ ชั่วโมงเล่น":"⏱️ Hours played",
+"💸 รายคน":"💸 Per player",
+"ไม่มีผู้เข้าร่วม":"No attendees",
+"📋 คัดลอกสรุปค่าใช้จ่าย → วางในไลน์กลุ่ม":"📋 Copy cost summary → paste in LINE",
+"🧾 ประวัติการจ่ายเงิน":"🧾 Payment history",
+"📊 สรุปผล":"📊 Summary",
+"🧾 โอน":"🧾 transfer",
+"💵 สด":"💵 cash",
+"✓ ผู้จัดการบันทึก":"✓ recorded by manager",
+"• อนุมัติโดย":"• approved by",
+"— ยังไม่จ่าย":"— unpaid",
+"ยอดที่ต้องจ่าย (นัด":"Amount due (session",
+"📣 ส่งแจ้งเตือนล่าสุดเมื่อ":"📣 Last reminder sent",
+"โดย":"by",
+"📣 ส่งแจ้งเตือนให้จ่าย":"📣 Send a payment reminder",
+"อีกครั้ง)":"again)",
+"การแจ้งเตือนจะขึ้นเด่นๆ บนหน้าแอปของ":"A reminder appears prominently in the app for",
+"ทุกครั้งที่เปิดแอป จนกว่าจะจ่าย":"every time they open it, until they pay",
+"📋 คัดลอกข้อความทวง → วางในไลน์":"📋 Copy reminder message → paste in LINE",
+"✓ เปลี่ยนสถานะเป็น":"✓ Mark as",
+"รับเงินแล้ว)":"received)",
+"📣 ส่งแจ้งเตือนถึง":"📣 Reminder sent to",
+"📋 คัดลอกแล้ว — เปิดไลน์กลุ่มแล้ววางได้เลย":"📋 Copied — open your LINE group and paste",
+"📋 คัดลอกข้อความ":"📋 Copy text",
+"คัดลอกอัตโนมัติไม่ได้ — แตะที่ข้อความด้านล่างเพื่อเลือกทั้งหมด แล้วคัดลอกเอง":"Auto-copy failed — tap the text below to select it, then copy manually",
+"ปิด":"Close",
+"💵 เงินสด":"💵 cash",
+"🧾 สลิป":"🧾 slip",
+"⏳ ตรวจ":"⏳ review",
+"💰 รายการรออนุมัติ":"💰 Pending approvals",
+"ไม่มีรายการค้างอนุมัติ":"Nothing pending",
+"รีเซ็ต PIN ของ":"Reset PIN for",
+"? เขาจะตั้ง PIN ใหม่ตอนล็อกอินครั้งถัดไป":"? They'll set a new PIN at next login",
+"รีเซ็ต PIN":"Reset PIN",
+"ยกเลิกสมาชิกแล้ว ขอบคุณที่ร่วมก๊วนกันมา 🙏":"Membership cancelled — thanks for playing with us 🙏",
+"ยกเลิกการเป็นสมาชิกของคุณเอง":"Cancel your own membership",
+"ยกเลิกสมาชิก":"Remove member",
+"👥 สมาชิกก๊วน":"👥 Club members",
+"เรียงตามตัวอักษร • ทุกคนแก้ไขข้อมูลของตัวเองได้ • Admin แก้ไขข้อมูลได้ทุกคน • การลบ: ตัวเอง, Admin หรือผู้จัดการ":"A-Z • everyone edits their own profile • Admin edits anyone • removal: self, Admin or Manager",
+"+ เพิ่มสมาชิกใหม่":"+ Add new member",
+"เพิ่มสมาชิกใหม่":"Add new member",
+"สมาชิกใหม่จะตั้ง PIN เองตอนล็อกอินครั้งแรก":"New members set their own PIN at first login",
+"เพิ่มเข้าก๊วน":"Add to club",
+"กรอกชื่อก่อนนะ":"Enter a name first",
+"เข้าก๊วนแล้ว 🎉":"added to the club 🎉",
+"ไม่มีสิทธิ์ลบสมาชิกคนนี้ (เฉพาะตัวเอง, Admin หรือผู้จัดการ)":"No permission to remove this member (self, Admin or Manager only)",
+"ลบ Admin ไม่ได้":"Can't remove the Admin",
+"ออกจากก๊วนแล้ว":"removed from the club",
+"ออกจากก๊วน":"Remove from club",
+"?\n(ประวัติในนัดเก่ายังเก็บไว้ แต่จะไม่อยู่ในรายชื่อและนัดที่ยังไม่จบ)":"?\n(Past-session history is kept, but they leave the roster and unfinished sessions)",
+"แก้ไขได้เฉพาะข้อมูลของตัวเอง (Admin แก้ได้ทุกคน)":"You can only edit your own profile (Admin edits anyone)",
+"โปรไฟล์ของฉัน":"My profile",
+"แก้ไขข้อมูลสมาชิก (โดย Admin)":"Edit member (by Admin)",
+"กำลังแก้ไขข้อมูลของ":"Editing the profile of",
+"เบอร์ติดต่อ (ไม่บังคับ)":"Phone (optional)",
+"เช่น 081-234-5678":"e.g. 081-234-5678",
+"ข้อมูลเพิ่มเติม (ไม่บังคับ)":"Extra info (optional)",
+"เช่น มือ N, ถนัดคู่หน้า, สังกัด อาคาร 3":"e.g. N-level, front-court player, Building 3",
+"เปลี่ยน PIN แล้ว":"PIN changed",
+"เปลี่ยน PIN":"Change PIN",
+"ออกจากระบบ":"Log out",
+"ชื่อห้ามว่าง":"Name can't be empty",
+"บันทึกโปรไฟล์แล้ว":"Profile saved",
+"บันทึกข้อมูลของ":"Saved profile of",
+"PIN ใหม่ 4 หลัก:":"New 4-digit PIN:",
+"PIN ต้องเป็นตัวเลข 4 หลัก":"PIN must be 4 digits",
+"👁️ แตะดูรายละเอียด":"👁️ tap for details",
+"🏆 สถิติ & อันดับก๊วน":"🏆 Club stats & ranking",
+"แตะชื่อดูประวัติรายคน)":"tap a name for their history)",
+"ยังไม่มีสถิติ — จบนัดแรกแล้วสถิติจะขึ้นที่นี่":"No stats yet — finish the first session and they'll appear here",
+"📋 คัดลอกสถิติ → วางในไลน์กลุ่ม":"📋 Copy stats → paste in LINE",
+"🌱 ยังไม่มีสถิติ":"🌱 No stats yet",
+"ยังไม่มีสถิติ":"No stats yet",
+"แต้ม":"pts",
+"สถิติของ":"Stats of",
+"ชนะ (เซ็ต)":"Won (sets)",
+"แพ้ (เซ็ต)":"Lost (sets)",
+"อัตราชนะ":"Win rate",
+"* รวมยอดยกมาจากไฟล์เดิม":"* includes carried-over totals",
+"L (ไม่มีรายละเอียดรายเซ็ต)":"L (no per-set details)",
+"⚔️ สถิติกับคู่ต่อสู้":"⚔️ Versus opponents",
+"เจอกับ":"vs",
+"🤝 สถิติกับคู่หู":"🤝 With partners",
+"จับคู่กับ":"with",
+"เซ็ต • รวม":"sets • total",
+"🗂️ ประวัตินัดที่จบแล้ว":"🗂️ Finished sessions",
+"บัญชีของคุณถูกนำออกจากก๊วน":"Your account was removed from the club",
+"ผู้เล่นทั้งสองทีม":"both teams",
+"ผู้เล่น":"Players",
+"ทีม A":"Team A",
+"ทีม B":"Team B",
+"คะแนน A":"Score A",
+"คะแนน B":"Score B",
+"ผู้ชนะ":"Winner",
+"ผู้บันทึก":"Recorded by",
+"จำนวนคน":"Players",
+"จำนวนเซ็ต":"Sets",
+"วิธีหาร":"Split method",
+"ตามชั่วโมงเล่น":"by hours played",
+"สถานะ":"Status",
+"ชนะ":"Won",
+"แพ้":"Lost",
+"เซ็ต":"Sets",
+"(คุณ)":"(you)",
+"คุณ)":"you)",
+"นัดตี":"Sessions",
+"สมาชิก":"Members",
+"สถิติ":"Stats",
+"ประวัติ":"History",
+"ยกเลิก":"Cancel",
+"ย้อนกลับ":"Back",
+"บันทึก":"Save",
+"ชำระเงิน":"pay",
+"ดูสถานะ":"view status",
+"แตะเพื่อ":"tap to ",
+"ลงชื่อ":"Sign up",
+"เปิดนัด":"Open",
+"จองคอร์ท":"Book courts",
+"เริ่มตี":"Play",
+"สรุปผล":"Finish",
+"ผู้จัดการ":"Manager",
+"คอร์ท":"Courts",
+"แก้ไข":"Edit",
+"ลบ":"Delete",
+"แล้ว":"",
+"ใช่":"yes"
+};
+const I18N_NUM = [
+  [/(\d+)\s*คน/g, "$1 players"],
+  [/(\d+)\s*คอร์ท/g, "$1 courts"],
+  [/(\d+)\s*เซ็ต/g, "$1 sets"],
+  [/(\d+)\s*ลูก/g, "$1 shuttles"],
+  [/(\d+)\s*รายการ/g, "$1 item(s)"],
+  [/(\d+)\s*นัด/g, "$1 sessions"],
+  [/(\d+(?:\.\d+)?)\s*ชม\./g, "$1 hr"],
+  [/ขั้นที่\s*(\d+)/g, "step $1"],
+  [/คอร์ท\s+(?=[0-9A-Za-z])/g, "Court "],
+  [/นัด\s+(?=[\d⏳✅❌])/g, "session "],
+  [/\sนาที/g, " min"]
+];
+let __i18nRe = null;
+function __i18nBuild(){
+  const keys = Object.keys(I18N).sort((a,b)=> b.length - a.length);
+  __i18nRe = new RegExp(keys.map(k=> k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
+}
+function t(s){
+  if(LANG!=="en" || s===null || s===undefined) return s;
+  s = String(s);
+  if(!/[ก-๙]/.test(s)) return s;
+  if(!__i18nRe) __i18nBuild();
+  let r = s.replace(__i18nRe, m=> I18N[m] !== undefined ? I18N[m] : m);
+  for(const [re, rep] of I18N_NUM) r = r.replace(re, rep);
+  return r;
+}
+function translateDom(root){
+  if(!root) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  while(w.nextNode()) nodes.push(w.currentNode);
+  nodes.forEach(n=>{
+    if(LANG==="en"){
+      const v = n.nodeValue; if(!v || !/[ก-๙]/.test(v)) return;
+      if(n.parentElement && n.parentElement.closest && n.parentElement.closest(".notx")) return;  // ข้อความของผู้ใช้ — ไม่แปล
+      n.__th = v;             // จำต้นฉบับไทยไว้ (สำหรับ element ที่ไม่ได้ re-render เช่น แท็บล่าง)
+      n.nodeValue = t(v);
+    } else if(n.__th !== undefined){
+      n.nodeValue = n.__th; delete n.__th;
+    }
+  });
+  if(root.querySelectorAll){
+    root.querySelectorAll("[placeholder]").forEach(el=>{
+      if(LANG==="en"){ if(/[ก-๙]/.test(el.placeholder)){ el.__thP = el.placeholder; el.placeholder = t(el.placeholder); } }
+      else if(el.__thP !== undefined){ el.placeholder = el.__thP; delete el.__thP; }
+    });
+    root.querySelectorAll("[title]").forEach(el=>{
+      const cur = el.getAttribute("title");
+      if(LANG==="en"){ if(/[ก-๙]/.test(cur)){ el.__thT = cur; el.setAttribute("title", t(cur)); } }
+      else if(el.__thT !== undefined){ el.setAttribute("title", el.__thT); delete el.__thT; }
+    });
+  }
+}
+/* confirm/prompt ก็แปลอัตโนมัติ */
+const __nativeConfirm = window.confirm.bind(window);
+const __nativePrompt  = window.prompt.bind(window);
+window.confirm = (m)=> __nativeConfirm(t(m));
+window.prompt  = (m,d)=> __nativePrompt(t(m), d);
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function mem(id){ return db.members.find(m=>m.id===id); }
 function me(){ return mem(meId); }
@@ -574,20 +1118,20 @@ function nameOf(id){ const m=mem(id); return m? m.name : "?"; }
 function emojiOf(id){ const m=mem(id); return m? m.emoji : "❔"; }
 function teamLabel(ids){ return ids.map(id=>emojiOf(id)+" "+esc(nameOf(id))).join(" + "); }
 function fmtDate(d){
-  try{ return new Date(d+"T00:00:00").toLocaleDateString("th-TH",{weekday:"long", day:"numeric", month:"long", year:"numeric"}); }
+  try{ return new Date(d+"T00:00:00").toLocaleDateString(loc(),{weekday:"long", day:"numeric", month:"long", year:"numeric"}); }
   catch(e){ return d; }
 }
 function fmtDateShort(d){
-  try{ return new Date(d+"T00:00:00").toLocaleDateString("th-TH",{weekday:"short", day:"numeric", month:"short", year:"2-digit"}); }
+  try{ return new Date(d+"T00:00:00").toLocaleDateString(loc(),{weekday:"short", day:"numeric", month:"short", year:"2-digit"}); }
   catch(e){ return d; }
 }
-function money(n){ return "฿" + (Math.round(n*100)/100).toLocaleString("th-TH",{maximumFractionDigits:2}); }
+function money(n){ return "฿" + (Math.round(n*100)/100).toLocaleString(loc(),{maximumFractionDigits:2}); }
 function toast(msg, err){
-  const t = $("toast");
-  t.textContent = msg; t.className = err? "show err":"show";
-  clearTimeout(window.__tt); window.__tt = setTimeout(()=> t.className="", 2400);
+  const el = $("toast");
+  el.textContent = t(msg); el.className = err? "show err":"show";
+  clearTimeout(window.__tt); window.__tt = setTimeout(()=> el.className="", 2400);
 }
-function modal(html){ $("modalBody").innerHTML = html; $("modalBg").classList.add("show"); }
+function modal(html){ $("modalBody").innerHTML = html; translateDom($("modalBody")); $("modalBg").classList.add("show"); }
 function closeModal(){ $("modalBg").classList.remove("show"); }
 $("modalBg").addEventListener("click", e=>{ if(e.target.id==="modalBg") closeModal(); });
 function modalOpen(){ return $("modalBg").classList.contains("show"); }
@@ -740,6 +1284,8 @@ function renderLogin(){
       </div>
       <div class="field"><input type="password" id="ckInp" placeholder="รหัสเข้าก๊วน" style="text-align:center; font-size:19px; letter-spacing:2px;" onkeydown="if(event.key==='Enter')submitClubKey()"></div>
       <button class="btn btn-lime btn-block" id="ckBtn" onclick="submitClubKey()">🔓 เข้าก๊วน</button>`;
+    document.querySelectorAll(".langLbl").forEach(el=> el.textContent = LANG==="en" ? "ไทย" : "EN");
+    translateDom($("loginView"));
     return;
   }
   if(!loginPick && !signupMode){
@@ -793,6 +1339,8 @@ function renderLogin(){
         <button class="pin-key" onclick="pinKey('del')">⌫</button>
       </div>`;
   }
+  document.querySelectorAll(".langLbl").forEach(el=> el.textContent = LANG==="en" ? "ไทย" : "EN");
+  translateDom($("loginView"));
 }
 function pickLogin(id){
   if(window.__booting) return toast("🕐 กำลังซิงก์ข้อมูลล่าสุด รออีกนิดเดียว…");
@@ -869,6 +1417,8 @@ function renderAll(){
   if(!meId) return;
   renderMeCap(); renderPlay(); renderMembers(); renderRank(); renderHistory();
   document.querySelectorAll(".view").forEach(el=> el.classList.toggle("on", el.id==="v-"+curView));
+  document.querySelectorAll(".langLbl").forEach(el=> el.textContent = LANG==="en" ? "ไทย" : "EN");
+  translateDom($("appView"));
 }
 function renderMeCap(){
   const m = me(); if(!m) return;
@@ -884,16 +1434,13 @@ function renderPlay(){
   const s = activeSession();
   let html = "";
 
-  // 💸 แจ้งเตือนยอดค้างจ่ายของฉัน (ขึ้นบนสุดหน้าของสมาชิกคนนั้นเอง)
-  db.sessions.filter(x=>x.status==="done" && x.attendees.some(a=>a.memberId===meId) && !(x.paid && x.paid[meId]))
-    .sort((a,b)=> b.date.localeCompare(a.date))
-    .forEach(x=>{
-      const req = x.payReq && x.payReq[meId];
-      const nud = !req && x.payNudge && x.payNudge[meId];
-      html += `<div class="banner-due ${nud?"nudged":""}" onclick="openPayment('${x.id}')">
-        ${req? "⏳ <b>รอผู้จัดการอนุมัติ</b>" : nud? `📣 <b>ผู้จัดการ (${esc(nameOf(nud.by))}) เตือน: กรุณาชำระ</b>` : "💸 <b>คุณมียอดค้างจ่าย</b>"} ${money(payAmt(x,meId))} — นัด ${fmtDateShort(x.date)} • <u>แตะเพื่อ${req? "ดูสถานะ":"ชำระเงิน"}</u>
-      </div>`;
-    });
+  // 📢 กระดานสื่อสารก๊วน — ประกาศล่าสุดจาก Admin/ผู้จัดการ (กล่องกระพริบ) + ปุ่มเขียนข้อความ
+  const ann = boardAnn();
+  html += `<div class="board-row">
+    ${ann? `<div class="banner-board blink" onclick="openBoard()">📢 <b>${emojiOf(ann.from)} ${esc(nameOf(ann.from))}:</b> ${esc(ann.text)} <span class="muted" style="font-size:11px;">• ${boardWhen(ann.at)}</span></div>`
+         : `<div class="banner-board" onclick="openBoard()" style="color:var(--ink-soft);">📢 ยังไม่มีประกาศจากผู้จัดการ — แตะเพื่อเปิดกระดานสื่อสารก๊วน</div>`}
+    <button class="board-write" onclick="openBoard()">✍️ เขียน</button>
+  </div>`;
 
   // 💰 แจ้งเตือนผู้จัดการ/Admin: มีรายการชำระเงินรออนุมัติ
   const pend = pendingApprovals();
@@ -973,6 +1520,90 @@ function openManageMenu(){
     <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
 }
 
+/* =====================================================
+   กระดานสื่อสารก๊วน (กระดานเดียวทั้งก๊วน)
+   — Admin/ผู้จัดการ(ค่าเริ่มต้น) เขียน = ประกาศกระพริบบนหน้าแรก
+   — สมาชิกทุกคนเปิดอ่านและตอบโต้ได้
+   ===================================================== */
+function isMgrRole(id){ const m=mem(id); return !!m && (m.role==="admin" || id===db.settings.defaultManagerId); }
+function boardAnn(){
+  const list = db.board||[];
+  for(let i=list.length-1; i>=0; i--){ if(isMgrRole(list[i].from)) return list[i]; }
+  return null;
+}
+function boardWhen(ts){
+  try{ return new Date(ts).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; }
+}
+function openBoard(){
+  const list = (db.board||[]).slice(-60);
+  const rows = list.map(b=>{
+    const m = mem(b.from);
+    const own = b.from===meId;
+    const annCls = isMgrRole(b.from)? "ann":"";
+    return `<div class="brd-msg ${own?"own":""} ${annCls}">
+      <div class="brd-head"><b>${m? m.emoji+" "+esc(m.name):"?"}</b>
+        ${isMgrRole(b.from)? `<span class="tag tag-mgr" style="font-size:9.5px; padding:1px 6px;">ประกาศ</span>`:""}
+        <span style="flex:1;">• ${boardWhen(b.at)}</span>
+        ${(own||isAdmin())? `<span style="color:var(--coral); cursor:pointer; font-weight:700;" onclick="delBoardMsg('${b.id}')">✕</span>`:""}
+      </div>
+      <div class="notx">${esc(b.text)}</div>
+    </div>`;
+  }).join("") || `<div class="empty"><div class="big">💬</div>ยังไม่มีข้อความ — เริ่มคุยกันเลย</div>`;
+  modal(`
+    <div class="modal-head"><h3>📢 กระดานสื่อสารก๊วน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0; font-size:11.5px;">Admin/ผู้จัดการเขียนแล้วจะขึ้นเป็นประกาศกระพริบบนหน้าแรกของทุกคน</p>
+    <div id="brdList" style="max-height:44vh; overflow:auto; margin-bottom:10px;">${rows}</div>
+    <div class="field"><textarea id="brdInp" rows="2" maxlength="300" placeholder="พิมพ์ข้อความถึงก๊วน…" style="width:100%; background:rgba(255,255,255,.06); color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:10px; font-family:inherit; font-size:14px; resize:none;"></textarea></div>
+    <button class="btn btn-lime btn-block" onclick="postBoardMsg()">📨 ส่งข้อความ</button>`);
+  const el = $("brdList"); if(el) el.scrollTop = el.scrollHeight;
+}
+async function postBoardMsg(){
+  const inp = $("brdInp"); if(!inp) return;
+  const v = inp.value.trim();
+  if(!v) return toast("พิมพ์ข้อความก่อนนะ", true);
+  db.board = db.board||[];
+  db.board.push({ id:uid(), from:meId, text:v.slice(0,300), at:Date.now() });
+  if(db.board.length>200) db.board = db.board.slice(-200);
+  await storeSave();
+  openBoard(); renderAll();
+  toast("ส่งข้อความแล้ว 📨");
+}
+async function delBoardMsg(id){
+  const b = (db.board||[]).find(x=>x.id===id); if(!b) return;
+  if(!(b.from===meId || isAdmin())) return;
+  if(!confirm("ลบข้อความนี้?")) return;
+  db.board = db.board.filter(x=>x.id!==id);
+  await storeSave(); openBoard(); renderAll();
+}
+
+/* ---------- ข้อความสั้นข้างชื่อในรายชื่อผู้ลงชื่อ ---------- */
+function openAttNote(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const a = s.attendees.find(x=>x.memberId===meId);
+  if(!a) return toast("ลงชื่อก่อนจึงเขียนข้อความได้", true);
+  modal(`
+    <div class="modal-head"><h3>📝 ข้อความของฉันในนัดนี้</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">ข้อความสั้นๆ จะแสดงข้างชื่อคุณในรายชื่อผู้ลงชื่อ เช่น ไปถึง 19.00 / รับเพื่อนได้ 1 คน</p>
+    <div class="field"><input type="text" id="attNoteInp" maxlength="60" value="${esc(a.note||"")}" placeholder="พิมพ์ข้อความสั้นๆ…"></div>
+    <button class="btn btn-lime btn-block" onclick="saveAttNote('${sid}')">💾 บันทึกข้อความ</button>
+    ${a.note? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="clearAttNote('${sid}')">ลบข้อความ</button>`:""}`);
+  const inp = $("attNoteInp"); if(inp){ inp.focus(); }
+}
+async function saveAttNote(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const a = s.attendees.find(x=>x.memberId===meId); if(!a) return;
+  a.note = ($("attNoteInp").value||"").trim().slice(0,60);
+  await storeSave(); closeModal(); renderAll();
+  toast(a.note? "บันทึกข้อความแล้ว" : "ลบข้อความแล้ว");
+}
+async function clearAttNote(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  const a = s.attendees.find(x=>x.memberId===meId); if(!a) return;
+  a.note = "";
+  await storeSave(); closeModal(); renderAll();
+  toast("ลบข้อความแล้ว");
+}
+
 /* ---------- สถานะ: เปิดรับลงชื่อ ---------- */
 function renderOpenSession(s){
   const joined = s.attendees.some(a=>a.memberId===meId);
@@ -989,9 +1620,24 @@ function renderOpenSession(s){
     <div class="sess-date">${fmtDate(s.date)}</div>
     <div class="muted">📍 ${esc(s.loc||"ยังไม่ระบุสถานที่")} • ⏰ ${esc(s.time||"-")} • ผู้จัดการนัด ${mgr? mgr.emoji+" "+esc(mgr.name):"-"}</div>
 
+    <div class="att-list">
+      <div class="muted" style="font-size:12px; margin-bottom:6px;">🙋 ลงชื่อเข้าตีแล้ว ${n} คน ${n? "— แตะชื่อตัวเองเพื่อเขียนข้อความสั้นๆ":""}</div>
+      ${n===0 ? `<div class="empty" style="padding:12px;"><div class="big">👀</div>ยังไม่มีใครลงชื่อ — เป็นคนแรกเลย!</div>` :
+        s.attendees.map((a,i)=>{
+          const m = mem(a.memberId); if(!m) return "";
+          const self = a.memberId===meId;
+          return `<div class="att-row ${self?"me":""}" ${self? `onclick="openAttNote('${s.id}')"`:""}>
+            <span class="no">${i+1}.</span><span class="av">${m.emoji}</span>
+            <span class="nm">${esc(m.name)}${self? ' <span class="muted">(คุณ)</span>':""}</span>
+            <span class="nt notx">${a.note? "💬 "+esc(a.note) : (self? `<span class="muted" style="color:var(--ink-soft);">✏️ แตะเพื่อเขียนโน้ต…</span>`:"")}</span>
+          </div>`;
+        }).join("")}
+    </div>
+
     <button class="big-join ${joined? 'btn-ghost':'btn-lime'}" onclick="toggleJoin('${s.id}')">
       ${joined ? "✓ ลงชื่อแล้ว — แตะเพื่อถอนชื่อ" : "🙋 ลงชื่อเข้าร่วมนัดนี้"}
     </button>
+    <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px;" onclick="openEditAttendees('${s.id}')">✏️ แก้ไขการลงชื่อ (ลงชื่อแทน / ถอนชื่อสมาชิก)</button>
 
     <div class="statgrid">
       <div class="statbox"><div class="v" style="color:var(--lime);">${n}</div><div class="l">ลงชื่อแล้ว (คน)</div></div>
@@ -1004,17 +1650,6 @@ function renderOpenSession(s){
       <button class="btn btn-blue big-join" onclick="openStartPlay('${s.id}')">🏟️ ขั้นที่ 3: เปิดคอร์ท → เริ่มตี (ทำเมื่อถึงวันตี)</button>
     `:""}
     ${stageBar(s)}
-  </div>
-
-  <div class="card">
-    <h3>🙋 สรุปผู้ลงชื่อเข้าร่วม (${n} คน)</h3>
-    ${n===0 ? `<div class="empty"><div class="big">👀</div>ยังไม่มีใครลงชื่อ — เป็นคนแรกเลย!</div>` :
-      `<div class="chips">${s.attendees.map(a=>{
-        const m = mem(a.memberId); if(!m) return "";
-        return `<span class="chip" style="cursor:default;"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
-      }).join("")}</div>`}
-    <div style="height:10px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="openEditAttendees('${s.id}')">✏️ แก้ไขการลงชื่อ (ลงชื่อแทน / ถอนชื่อสมาชิก)</button>
   </div>`;
 }
 
@@ -1428,7 +2063,7 @@ function openFeedbackList(){
     <div class="set-card">
       <div style="font-size:13.5px;">${esc(f.text)}</div>
       <div class="set-meta" style="text-align:left; display:flex; justify-content:space-between; align-items:center;">
-        <span>${emojiOf(f.from)} ${esc(nameOf(f.from))} • ${f.at? new Date(f.at).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</span>
+        <span>${emojiOf(f.from)} ${esc(nameOf(f.from))} • ${f.at? new Date(f.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</span>
         <span style="color:var(--coral); cursor:pointer; font-weight:700;" onclick="delFeedback('${f.id}')">✕ ลบ</span>
       </div>
     </div>`).join("");
@@ -1541,7 +2176,7 @@ function buildWorkbook(){
     ["ชีต AppData คือข้อมูลดิบของแอป — ห้ามแก้ไข มิฉะนั้นจะนำข้อมูลกลับเข้าแอปไม่ได้"],
     ["วิธีนำข้อมูลกลับเข้าแอป: เปิดแอป → แท็บนัดตี → การจัดการก๊วน → นำเข้าข้อมูลจาก Excel"],
     [""],
-    ["ส่งออกเมื่อ", new Date().toLocaleString("th-TH")]
+    ["ส่งออกเมื่อ", new Date().toLocaleString(loc())]
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(info), "อ่านก่อน");
 
@@ -2010,7 +2645,7 @@ function openPayReview(sid, mid){
     <div class="row" style="margin-bottom:8px;"><span class="muted">สมาชิก</span><b>${m? m.emoji+" "+esc(m.name):"?"}</b></div>
     <div class="row" style="margin-bottom:8px;"><span class="muted">ยอดที่ต้องจ่าย</span><b>${money(owed)}</b></div>
     <div class="row" style="margin-bottom:8px;"><span class="muted">วิธีชำระ</span><b>${req.method==="cash"?"💵 เงินสด":"🧾 โอนเงิน (แนบสลิป)"}</b></div>
-    <div class="row" style="margin-bottom:10px;"><span class="muted">แจ้งเมื่อ</span><b>${req.at? new Date(req.at).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"-"}</b></div>
+    <div class="row" style="margin-bottom:10px;"><span class="muted">แจ้งเมื่อ</span><b>${req.at? new Date(req.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"-"}</b></div>
     ${req.slip? `<img src="${req.slip}" class="slip-img" alt="slip" style="margin-bottom:10px;">`:""}
     ${ocrLine}
     ${mg? `
@@ -2046,7 +2681,7 @@ function viewSlip(sid, mid){
   modal(`
     <div class="modal-head"><h3>🧾 สลิปของ ${emojiOf(mid)} ${esc(nameOf(mid))}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     <img src="${info.slip}" class="slip-img" alt="slip">
-    <p class="muted" style="margin:10px 0 12px;">อนุมัติโดย ${emojiOf(info.approvedBy)} ${esc(nameOf(info.approvedBy))}${info.approvedAt? " • "+new Date(info.approvedAt).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</p>
+    <p class="muted" style="margin:10px 0 12px;">อนุมัติโดย ${emojiOf(info.approvedBy)} ${esc(nameOf(info.approvedBy))}${info.approvedAt? " • "+new Date(info.approvedAt).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</p>
     <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
 }
 /* Admin/ผู้จัดการ แตะคนที่ยังไม่จ่าย: ส่งแจ้งเตือน หรือเปลี่ยนสถานะ */
@@ -2057,7 +2692,7 @@ function openUnpaidAction(sid, mid){
   modal(`
     <div class="modal-head"><h3>💸 ${m.emoji} ${esc(m.name)} — ยังไม่จ่าย</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     <div class="row" style="margin-bottom:10px;"><span class="muted">ยอดที่ต้องจ่าย (นัด ${fmtDateShort(s.date)})</span><b>${money(payAmt(s,mid))}</b></div>
-    ${nudged? `<p class="muted" style="margin-top:0;">📣 ส่งแจ้งเตือนล่าสุดเมื่อ ${new Date(nudged.at).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} โดย ${emojiOf(nudged.by)} ${esc(nameOf(nudged.by))}</p>`:""}
+    ${nudged? `<p class="muted" style="margin-top:0;">📣 ส่งแจ้งเตือนล่าสุดเมื่อ ${new Date(nudged.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} โดย ${emojiOf(nudged.by)} ${esc(nameOf(nudged.by))}</p>`:""}
     <button class="btn btn-lime btn-block" onclick="sendNudge('${sid}','${mid}')">📣 ส่งแจ้งเตือนให้จ่าย${nudged?" (อีกครั้ง)":""}</button>
     <p class="muted" style="margin:6px 0 10px; font-size:11.5px;">การแจ้งเตือนจะขึ้นเด่นๆ บนหน้าแอปของ ${esc(m.name)} ทุกครั้งที่เปิดแอป จนกว่าจะจ่าย</p>
     <button class="btn btn-ghost btn-block" onclick="copyNudgeMsg('${sid}','${mid}')">📋 คัดลอกข้อความทวง → วางในไลน์</button>
@@ -2103,11 +2738,17 @@ function copyAnnounce(sid){
   const s = db.sessions.find(x=>x.id===sid); if(!s) return;
   const n = s.attendees.length;
   const names = s.attendees.map(a=>nameOf(a.memberId)).filter(Boolean).join(", ");
-  const txt = "🏸 ก๊วน Smash Badminton Club\n"
-    + "📅 นัดตี " + fmtDate(s.date) + "\n"
-    + "📍 " + (s.loc||"ยังไม่ระบุสถานที่") + "  ⏰ " + (s.time||"-") + "\n"
-    + "🙋 ลงชื่อแล้ว " + n + " คน" + (n ? " : " + names : "") + "\n\n"
-    + "ลงชื่อเข้าร่วม / ถอนชื่อ ได้ในแอป 👇\n" + APP_URL;
+  const txt = LANG==="en"
+    ? "🏸 Smash Badminton Club\n"
+      + "📅 Session: " + fmtDate(s.date) + "\n"
+      + "📍 " + (s.loc||"Venue TBD") + "  ⏰ " + (s.time||"-") + "\n"
+      + "🙋 Signed up: " + n + (n ? " — " + names : "") + "\n\n"
+      + "Sign up / withdraw in the app 👇\n" + APP_URL
+    : "🏸 ก๊วน Smash Badminton Club\n"
+      + "📅 นัดตี " + fmtDate(s.date) + "\n"
+      + "📍 " + (s.loc||"ยังไม่ระบุสถานที่") + "  ⏰ " + (s.time||"-") + "\n"
+      + "🙋 ลงชื่อแล้ว " + n + " คน" + (n ? " : " + names : "") + "\n\n"
+      + "ลงชื่อเข้าร่วม / ถอนชื่อ ได้ในแอป 👇\n" + APP_URL;
   copyLine(txt);
 }
 function copyPaySummary(sid){
@@ -2116,20 +2757,31 @@ function copyPaySummary(sid){
   const lines = s.attendees.map(a=>{
     const mid = a.memberId, m = mem(mid); if(!m) return "";
     const paid = !!(s.paid && s.paid[mid]), req = s.payReq && s.payReq[mid];
-    const st = paid ? "✅ จ่ายแล้ว" : req ? "⏳ รออนุมัติ" : "❌ ยังไม่จ่าย";
+    const st = LANG==="en"
+      ? (paid ? "✅ paid" : req ? "⏳ pending" : "❌ unpaid")
+      : (paid ? "✅ จ่ายแล้ว" : req ? "⏳ รออนุมัติ" : "❌ ยังไม่จ่าย");
     return "• " + m.name + " " + money(split[mid]||0) + " — " + st;
   }).filter(Boolean).join("\n");
-  const txt = "💰 สรุปค่าใช้จ่าย — นัดตี " + fmtDate(s.date) + "\n"
-    + "รวมทั้งนัด " + money(total) + " (คอร์ท " + money(courtCost(s)) + " + ลูก " + money(shuttleCost(s)) + ")\n\n"
-    + lines + "\n\n"
-    + "จ่ายเงิน / แนบสลิป ได้ในแอป 👇\n" + APP_URL;
+  const txt = LANG==="en"
+    ? "💰 Cost summary — session " + fmtDate(s.date) + "\n"
+      + "Total " + money(total) + " (courts " + money(courtCost(s)) + " + shuttles " + money(shuttleCost(s)) + ")\n\n"
+      + lines + "\n\n"
+      + "Pay / attach a slip in the app 👇\n" + APP_URL
+    : "💰 สรุปค่าใช้จ่าย — นัดตี " + fmtDate(s.date) + "\n"
+      + "รวมทั้งนัด " + money(total) + " (คอร์ท " + money(courtCost(s)) + " + ลูก " + money(shuttleCost(s)) + ")\n\n"
+      + lines + "\n\n"
+      + "จ่ายเงิน / แนบสลิป ได้ในแอป 👇\n" + APP_URL;
   copyLine(txt);
 }
 function copyNudgeMsg(sid, mid){
   const s = db.sessions.find(x=>x.id===sid); const m = mem(mid); if(!s || !m) return;
-  const txt = "📣 แจ้งเตือนจากก๊วน Smash 🏸\n"
-    + m.emoji + " " + m.name + " ยังค้างค่าตีนัด " + fmtDateShort(s.date) + " จำนวน " + money(payAmt(s,mid)) + " นะครับ\n"
-    + "จ่าย / แนบสลิป ได้ในแอปเลย 👇\n" + APP_URL;
+  const txt = LANG==="en"
+    ? "📣 Reminder from Smash club 🏸\n"
+      + m.emoji + " " + m.name + " still owes " + money(payAmt(s,mid)) + " for the session on " + fmtDateShort(s.date) + "\n"
+      + "Pay / attach a slip in the app 👇\n" + APP_URL
+    : "📣 แจ้งเตือนจากก๊วน Smash 🏸\n"
+      + m.emoji + " " + m.name + " ยังค้างค่าตีนัด " + fmtDateShort(s.date) + " จำนวน " + money(payAmt(s,mid)) + " นะครับ\n"
+      + "จ่าย / แนบสลิป ได้ในแอปเลย 👇\n" + APP_URL;
   copyLine(txt);
 }
 function copyPlayingUpdate(sid){
@@ -2139,12 +2791,17 @@ function copyPlayingUpdate(sid){
   const lines = sets.map((x,i)=>{
     const a = x.teamA.map(nameOf).join("+"), b = x.teamB.map(nameOf).join("+");
     const w = setWinner(x);
-    return "เซ็ต " + (i+1) + ": " + (w==="A"?"🏆":"") + a + " " + x.scoreA + " - " + x.scoreB + " " + b + (w==="B"?"🏆":"");
+    return (LANG==="en"?"Set ":"เซ็ต ") + (i+1) + ": " + (w==="A"?"🏆":"") + a + " " + x.scoreA + " - " + x.scoreB + " " + b + (w==="B"?"🏆":"");
   }).join("\n");
-  const txt = "🏸 ผลสดจากคอร์ท — ก๊วน Smash " + fmtDateShort(s.date) + "\n"
-    + "📍 " + (s.loc||"-") + " • ผู้เล่น " + s.attendees.length + " คน • ตีแล้ว " + sets.length + " เซ็ต\n\n"
-    + lines + "\n\n"
-    + "ดูสด / บันทึกเซ็ต ได้ในแอป 👇\n" + APP_URL;
+  const txt = LANG==="en"
+    ? "🏸 Live from the courts — Smash club " + fmtDateShort(s.date) + "\n"
+      + "📍 " + (s.loc||"-") + " • " + s.attendees.length + " players • " + sets.length + " sets played\n\n"
+      + lines + "\n\n"
+      + "Watch live / record sets in the app 👇\n" + APP_URL
+    : "🏸 ผลสดจากคอร์ท — ก๊วน Smash " + fmtDateShort(s.date) + "\n"
+      + "📍 " + (s.loc||"-") + " • ผู้เล่น " + s.attendees.length + " คน • ตีแล้ว " + sets.length + " เซ็ต\n\n"
+      + lines + "\n\n"
+      + "ดูสด / บันทึกเซ็ต ได้ในแอป 👇\n" + APP_URL;
   copyLine(txt);
 }
 function copyRankSummary(){
@@ -2154,9 +2811,13 @@ function copyRankSummary(){
   const lines = ranked.slice(0,15).map((x,i)=>
     (medal[i]||("  "+(i+1)+".")) + " " + x.name + " " + Math.round(x.wr*100) + "% (" + x.w + "W-" + x.l + "L)"
   ).join("\n");
-  const txt = "🏆 สถิติ & อันดับก๊วน Smash Badminton Club\n\n"
-    + lines + (ranked.length>15? "\n…และอีก " + (ranked.length-15) + " คน" : "") + "\n\n"
-    + "ดูสถิติเต็มๆ รายคน ได้ในแอป 👇\n" + APP_URL;
+  const txt = LANG==="en"
+    ? "🏆 Smash Badminton Club — stats & ranking\n\n"
+      + lines + (ranked.length>15? "\n…and " + (ranked.length-15) + " more" : "") + "\n\n"
+      + "See full per-player stats in the app 👇\n" + APP_URL
+    : "🏆 สถิติ & อันดับก๊วน Smash Badminton Club\n\n"
+      + lines + (ranked.length>15? "\n…และอีก " + (ranked.length-15) + " คน" : "") + "\n\n"
+      + "ดูสถิติเต็มๆ รายคน ได้ในแอป 👇\n" + APP_URL;
   copyLine(txt);
 }
 function copySessionSummary(sid){
@@ -2170,11 +2831,17 @@ function copySessionSummary(sid){
     return { n: m.name, mvp: mvps.includes(m.id), w:v.w, l:v.l, wr };
   }).filter(Boolean).sort((a,b)=> b.w-a.w || a.l-b.l)
     .map(x=> "• " + x.n + (x.mvp?" ⭐":"") + " " + x.w + "W-" + x.l + "L (" + x.wr + ")").join("\n");
-  const txt = "🏁 สรุปผลนัดตี " + fmtDate(s.date) + " — ก๊วน Smash 🏸\n"
-    + "📍 " + (s.loc||"-") + " • ผู้เล่น " + s.attendees.length + " คน • " + (s.sets||[]).length + " เซ็ต • ใช้ลูก " + (s.shuttlesUsed||0) + " ลูก\n"
-    + (mvps.length? "⭐ MVP: " + mvps.map(nameOf).join(", ") + "\n" : "")
-    + "\n" + lines + "\n\n"
-    + "💰 ค่าใช้จ่ายรวม " + money(totalCost(s)) + " — ดูยอด / จ่ายเงิน ได้ในแอป 👇\n" + APP_URL;
+  const txt = LANG==="en"
+    ? "🏁 Session result " + fmtDate(s.date) + " — Smash club 🏸\n"
+      + "📍 " + (s.loc||"-") + " • " + s.attendees.length + " players • " + (s.sets||[]).length + " sets • " + (s.shuttlesUsed||0) + " shuttles\n"
+      + (mvps.length? "⭐ MVP: " + mvps.map(nameOf).join(", ") + "\n" : "")
+      + "\n" + lines + "\n\n"
+      + "💰 Total cost " + money(totalCost(s)) + " — view / pay in the app 👇\n" + APP_URL
+    : "🏁 สรุปผลนัดตี " + fmtDate(s.date) + " — ก๊วน Smash 🏸\n"
+      + "📍 " + (s.loc||"-") + " • ผู้เล่น " + s.attendees.length + " คน • " + (s.sets||[]).length + " เซ็ต • ใช้ลูก " + (s.shuttlesUsed||0) + " ลูก\n"
+      + (mvps.length? "⭐ MVP: " + mvps.map(nameOf).join(", ") + "\n" : "")
+      + "\n" + lines + "\n\n"
+      + "💰 ค่าใช้จ่ายรวม " + money(totalCost(s)) + " — ดูยอด / จ่ายเงิน ได้ในแอป 👇\n" + APP_URL;
   copyLine(txt);
 }
 
@@ -2539,6 +3206,16 @@ async function init(){
     const noi = db.members.find(m=>m.id==="m7") || db.members.find(m=>m.name==="Noi");
     if(noi) db.settings.defaultManagerId = noi.id;
     db.flowV = 1;
+    await storeSave();
+  }
+  // one-time: เปิดกระดานสื่อสารก๊วน พร้อมประกาศต้อนรับจากผู้จัดการ
+  if(!db.board) db.board = [];
+  if((db.boardV||0) < 1){
+    if(!db.board.length){
+      const mgrId = db.settings.defaultManagerId || (db.members.find(m=>m.role==="admin")||{}).id;
+      if(mgrId) db.board.push({ id:"bd-welcome", from:mgrId, text:"ยินดีต้อนรับสู่กระดานสื่อสารของก๊วน 🏸 Admin/ผู้จัดการประกาศได้ที่นี่ สมาชิกกดเข้ามาอ่านและตอบโต้กันได้เลย", at:Date.now() });
+    }
+    db.boardV = 1;
     await storeSave();
   }
   updateSyncBadge();
