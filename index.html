@@ -61,6 +61,7 @@ textarea{ font-family:'Noto Sans Thai',sans-serif; resize:vertical; }
 input:focus,select:focus,textarea:focus{ outline:none; border-color:var(--blue); }
 label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
 .field{ margin-bottom:12px; }
+.date-pv{ margin-top:6px; font-size:14px; font-weight:600; color:var(--lime); }
 .frow{ display:flex; gap:10px; } .frow .field{ flex:1; }
 .tag{ display:inline-flex; align-items:center; gap:4px; font-size:12.5px; font-weight:700; padding:4px 11px; border-radius:999px; }
 .tag-admin{ background:rgba(255,194,75,.15); color:var(--amber); border:1px solid rgba(255,194,75,.4); }
@@ -1006,6 +1007,23 @@ function fmtDate(d) {
     return d;
   }
 }
+function fmtDateFull(d) {
+  try {
+    return new Date(d + "T00:00:00").toLocaleDateString("th-TH", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric"
+    });
+  } catch (e) {
+    return d;
+  }
+}
+function updateDatePv(inputId, pvId) {
+  const el = $(inputId), pv = $(pvId);
+  if (!el || !pv) return;
+  pv.textContent = el.value ? "\ud83d\udcc5 " + fmtDateFull(el.value) : "ยังไม่ได้เลือกวัน";
+}
 function fmtDateShort(d) {
   try {
     return new Date(d + "T00:00:00").toLocaleDateString("th-TH", {
@@ -1561,7 +1579,7 @@ function openNewSession() {
   const today = new Date();
   today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
   const opts = db.members.map(m => "<option value=\"".concat(m.id, "\" ").concat(m.id === db.settings.defaultManagerId ? "selected" : "", ">").concat(m.emoji, " ").concat(esc(m.name)).concat(m.id === db.settings.defaultManagerId ? " (ค่าเริ่มต้น)" : "", "</option>")).join("");
-  modal("\n    <div class=\"modal-head\"><h3>📅 ขั้นที่ 1: กำหนดวันตี & เปิดนัด</h3><button class=\"mclose\" onclick=\"closeModal()\">✕</button></div>\n    <p class=\"muted\" style=\"margin-top:0;\">กำหนดแค่วัน สถานที่ และเวลา — ยังไม่ต้องมีข้อมูลคอร์ท รอดูยอดคนลงชื่อก่อนแล้วค่อยจองคอร์ทให้พอดี</p>\n    <div class=\"field\"><label>วันที่ตี</label><input type=\"date\" id=\"nsDate\" value=\"".concat(today.toISOString().slice(0, 10), "\"></div>\n    <div class=\"field\"><label>สถานที่</label><input type=\"text\" id=\"nsLoc\" placeholder=\"เช่น ยิม4 มธ.\" value=\"ยิม4 มธ.\"></div>\n    <div class=\"frow\">\n      <div class=\"field\"><label>ช่วงเวลา</label><input type=\"text\" id=\"nsTime\" placeholder=\"เช่น 18.00-20.00\" value=\"18.00-20.00\"></div>\n      <div class=\"field\"><label>ผู้จัดการนัดนี้</label><select id=\"nsMgr\">").concat(opts, "</select></div>\n    </div>\n    <button class=\"btn btn-lime btn-block\" onclick=\"createSession()\">💾 บันทึก — เปิดนัดให้สมาชิกลงชื่อ</button>\n    <div style=\"height:8px;\"></div>\n    <button class=\"btn btn-ghost btn-block\" onclick=\"closeModal()\">◀️ ย้อนกลับ</button>"));
+  modal("\n    <div class=\"modal-head\"><h3>📅 ขั้นที่ 1: กำหนดวันตี & เปิดนัด</h3><button class=\"mclose\" onclick=\"closeModal()\">✕</button></div>\n    <p class=\"muted\" style=\"margin-top:0;\">กำหนดแค่วัน สถานที่ และเวลา — ยังไม่ต้องมีข้อมูลคอร์ท รอดูยอดคนลงชื่อก่อนแล้วค่อยจองคอร์ทให้พอดี</p>\n    <div class=\"field\"><label>วันที่ตี</label><input type=\"date\" id=\"nsDate\" onchange=\"updateDatePv('nsDate','nsDatePv')\" value=\"".concat(today.toISOString().slice(0, 10), "\"><div id=\"nsDatePv\" class=\"date-pv\">📅 ", fmtDateFull(today.toISOString().slice(0, 10)), "</div></div>\n    <div class=\"field\"><label>สถานที่</label><input type=\"text\" id=\"nsLoc\" placeholder=\"เช่น ยิม4 มธ.\" value=\"ยิม4 มธ.\"></div>\n    <div class=\"frow\">\n      <div class=\"field\"><label>ช่วงเวลา</label><input type=\"text\" id=\"nsTime\" placeholder=\"เช่น 18.00-20.00\" value=\"18.00-20.00\"></div>\n      <div class=\"field\"><label>ผู้จัดการนัดนี้</label><select id=\"nsMgr\">").concat(opts, "</select></div>\n    </div>\n    <button class=\"btn btn-lime btn-block\" onclick=\"createSession()\">💾 บันทึก — เปิดนัดให้สมาชิกลงชื่อ</button>\n    <div style=\"height:8px;\"></div>\n    <button class=\"btn btn-ghost btn-block\" onclick=\"closeModal()\">◀️ ย้อนกลับ</button>"));
 }
 async function createSession() {
   const date = $("nsDate").value;
@@ -1591,7 +1609,7 @@ function openEditSession(sid) {
   const s = db.sessions.find(x => x.id === sid);
   if (!s || !canManage(s)) return;
   const opts = db.members.map(m => "<option value=\"".concat(m.id, "\" ").concat(m.id === s.managerId ? "selected" : "", ">").concat(m.emoji, " ").concat(esc(m.name), "</option>")).join("");
-  modal("\n    <div class=\"modal-head\"><h3>แก้ไขนัดตี</h3><button class=\"mclose\" onclick=\"closeModal()\">✕</button></div>\n    <div class=\"field\"><label>วันที่ตี</label><input type=\"date\" id=\"esDate\" value=\"".concat(esc(s.date), "\"></div>\n    <div class=\"field\"><label>สถานที่</label><input type=\"text\" id=\"esLoc\" value=\"").concat(esc(s.loc), "\"></div>\n    <div class=\"frow\">\n      <div class=\"field\"><label>ช่วงเวลา</label><input type=\"text\" id=\"esTime\" value=\"").concat(esc(s.time), "\"></div>\n      <div class=\"field\"><label>ผู้จัดการนัดนี้ (มอบหมายแทนได้)</label><select id=\"esMgr\">").concat(opts, "</select></div>\n    </div>\n    <button class=\"btn btn-lime btn-block\" onclick=\"saveEditSession('").concat(s.id, "')\">💾 บันทึก</button>\n    <div style=\"height:8px;\"></div>\n    <button class=\"btn btn-ghost btn-block\" onclick=\"closeModal()\">◀️ ย้อนกลับ (ไม่บันทึก)</button>\n    <div style=\"height:8px;\"></div>\n    <button class=\"btn btn-danger btn-block\" onclick=\"deleteSession('").concat(s.id, "')\">ลบนัดนี้ทั้งหมด</button>"));
+  modal("\n    <div class=\"modal-head\"><h3>แก้ไขนัดตี</h3><button class=\"mclose\" onclick=\"closeModal()\">✕</button></div>\n    <div class=\"field\"><label>วันที่ตี</label><input type=\"date\" id=\"esDate\" onchange=\"updateDatePv('esDate','esDatePv')\" value=\"".concat(esc(s.date), "\"><div id=\"esDatePv\" class=\"date-pv\">📅 ", fmtDateFull(s.date), "</div></div>\n    <div class=\"field\"><label>สถานที่</label><input type=\"text\" id=\"esLoc\" value=\"").concat(esc(s.loc), "\"></div>\n    <div class=\"frow\">\n      <div class=\"field\"><label>ช่วงเวลา</label><input type=\"text\" id=\"esTime\" value=\"").concat(esc(s.time), "\"></div>\n      <div class=\"field\"><label>ผู้จัดการนัดนี้ (มอบหมายแทนได้)</label><select id=\"esMgr\">").concat(opts, "</select></div>\n    </div>\n    <button class=\"btn btn-lime btn-block\" onclick=\"saveEditSession('").concat(s.id, "')\">💾 บันทึก</button>\n    <div style=\"height:8px;\"></div>\n    <button class=\"btn btn-ghost btn-block\" onclick=\"closeModal()\">◀️ ย้อนกลับ (ไม่บันทึก)</button>\n    <div style=\"height:8px;\"></div>\n    <button class=\"btn btn-danger btn-block\" onclick=\"deleteSession('").concat(s.id, "')\">ลบนัดนี้ทั้งหมด</button>"));
 }
 async function saveEditSession(sid) {
   const s = db.sessions.find(x => x.id === sid);
