@@ -1546,6 +1546,12 @@ function go(v){
 function backBar(){
   return `<button class="btn btn-ghost btn-sm" style="margin-bottom:10px;" onclick="go('play')">◀️ ย้อนกลับหน้าแรก</button>`;
 }
+/* ปุ่ม Turn Pro — แสดงเฉพาะคนที่ยังไม่เป็น Pro (ใช้ซ้ำในหน้า สมาชิก / สถิติ / ประวัติ) */
+function turnProBtn(){
+  const m = me();
+  if(!m || m.pro) return "";
+  return `<button class="btn ${m.proReq? "btn-ghost":"btn-blue"} btn-block" style="margin-bottom:10px;" onclick="openTurnPro()">${m.proReq? "⏳ Turn Pro — รอ Admin อนุมัติ (แตะเพื่อดู/ยกเลิก)":"⚡ Turn Pro — ปลดล็อกค่ามือ ระดับมือ S/N/P และเครื่องมือจัดทีม"}</button>`;
+}
 function renderAll(){
   if(!meId) return;
   const isPro = !!(me() && me().pro);
@@ -3199,6 +3205,7 @@ function renderMembers(){
   }).join("");
   v.innerHTML = `
     ${backBar()}
+    ${turnProBtn()}
     <div class="card">
       <h3>👥 สมาชิกก๊วน (${db.members.length})</h3>
       <p class="muted" style="margin:0 0 6px;">เรียงตามตัวอักษร • ทุกคนแก้ไขข้อมูลของตัวเองได้ • Admin แก้ไขข้อมูลได้ทุกคน • การลบ: ตัวเอง, Admin หรือผู้จัดการ</p>
@@ -3543,7 +3550,7 @@ function renderRank(){
   }
   v.innerHTML = `
     ${backBar()}
-    ${!(me()&&me().pro)? `<button class="btn ${me()&&me().proReq? "btn-ghost":"btn-blue"} btn-block" style="margin-bottom:10px;" onclick="openTurnPro()">${me()&&me().proReq? "⏳ Turn Pro — รอ Admin อนุมัติ (แตะเพื่อดู/ยกเลิก)":"⚡ Turn Pro — ปลดล็อกค่ามือ ระดับมือ S/N/P และเครื่องมือจัดทีม"}</button>`:""}
+    ${turnProBtn()}
     <div class="card">
       <h3>🏆 สถิติ & อันดับก๊วน <span class="muted" style="font-weight:400;">(แตะชื่อดูประวัติรายคน)</span></h3>
       ${rows || '<div class="empty"><div class="big">🏆</div>ยังไม่มีสถิติ — จบนัดแรกแล้วสถิติจะขึ้นที่นี่</div>'}
@@ -3777,7 +3784,7 @@ function renderHistory(){
       </div>`:""}
     </div>`;
   }).join("");
-  v.innerHTML = `${backBar()}<div class="card"><h3>🗂️ ประวัตินัดที่จบแล้ว</h3>${rows || '<div class="empty"><div class="big">🗂️</div>ยังไม่มีนัดที่จบ</div>'}</div>`;
+  v.innerHTML = `${backBar()}${turnProBtn()}<div class="card"><h3>🗂️ ประวัตินัดที่จบแล้ว</h3>${rows || '<div class="empty"><div class="big">🗂️</div>ยังไม่มีนัดที่จบ</div>'}</div>`;
 }
 /* ลบนัดที่จบแล้วออกจากประวัติ (Admin/ผู้จัดการ) — ยืนยัน 2 ชั้นเพราะสถิติและค่าใช้จ่ายของนัดจะหายทั้งหมด */
 async function delDoneSession(sid){
