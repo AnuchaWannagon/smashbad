@@ -95,6 +95,7 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 .att-row.me{ border-color:rgba(198,242,78,.55); cursor:pointer; }
 .att-row .no{ min-width:18px; text-align:right; color:var(--ink-soft); font-size:11px; }
 .att-row .nm{ font-weight:700; white-space:nowrap; }
+.pro-badge{ display:inline-block; font-family:'Prompt',sans-serif; font-size:9px; font-weight:800; color:#3a2a00; background:linear-gradient(135deg,#ffd75e,#ffb347); padding:1px 6px 2px; border-radius:8px; vertical-align:2px; letter-spacing:.2px; }
 .att-row .nt{ flex:1; text-align:right; font-size:12px; color:var(--amber); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* label เด่นในฟอร์มบันทึกเซ็ต */
 .setlbl{ font-size:15.5px !important; font-weight:800 !important; color:var(--lime) !important; font-family:'Prompt','Noto Sans Thai',sans-serif; }
@@ -768,8 +769,8 @@ const I18N = {
 "⚡ โหมด Pro":"⚡ Pro mode",
 "ออกจากโหมด Pro":"Leave Pro mode",
 "ระดับมือ":"Level",
-"ค่ามือ":"Rating",
-"🏅 อันดับค่ามือ (เฉพาะสมาชิก Pro)":"🏅 Rating leaderboard (Pro members)",
+"แต้มมือ":"Rating",
+"🏅 อันดับแต้มมือ (เฉพาะสมาชิก Pro)":"🏅 Rating leaderboard (Pro members)",
 "🎲 จัดทีมให้สูสี":"🎲 Balance teams",
 "(เลือก 4 คน)":"(pick 4 players)",
 "⏳ คิวแฟร์ — นัดวันนี้":"⏳ Fair queue — today",
@@ -798,6 +799,11 @@ const I18N = {
 "📢 ประกาศ":"📢 Announcement",
 "หน้าแรกจะแสดง 2 ข้อความ: 📢 ประกาศล่าสุด และ 💬 ข้อความทั่วไปล่าสุด":"Home shows 2 messages: 📢 latest announcement and 💬 latest general message",
 "ส่งประกาศแล้ว 📢":"Announcement posted 📢",
+"💳 วิธีการจ่ายเงิน":"💳 How to pay",
+"💳 แก้ไขวิธีการจ่ายเงิน":"💳 Edit payment instructions",
+"💳 สแกนเพื่อจ่าย":"💳 Scan to pay",
+"แตะรูปเพื่อขยาย QR":"tap image to enlarge QR",
+"✏️ แก้ไข":"✏️ Edit",
 "💰 หน้าจ่ายเงิน":"💰 Payments",
 "กำหนดเอง":"custom",
 "อัตโนมัติ":"auto",
@@ -1550,7 +1556,7 @@ function backBar(){
 function turnProBtn(){
   const m = me();
   if(!m || m.pro) return "";
-  return `<button class="btn ${m.proReq? "btn-ghost":"btn-blue"} btn-block" style="margin-bottom:10px;" onclick="openTurnPro()">${m.proReq? "⏳ Turn Pro — รอ Admin อนุมัติ (แตะเพื่อดู/ยกเลิก)":"⚡ Turn Pro — ปลดล็อกค่ามือ ระดับมือ S/N/P และเครื่องมือจัดทีม"}</button>`;
+  return `<button class="btn ${m.proReq? "btn-ghost":"btn-blue"} btn-block" style="margin-bottom:10px;" onclick="openTurnPro()">${m.proReq? "⏳ Turn Pro — รอ Admin อนุมัติ (แตะเพื่อดู/ยกเลิก)":"⚡ Turn Pro — ปลดล็อกแต้มมือ ระดับมือ S/N/P และเครื่องมือจัดทีม"}</button>`;
 }
 function renderAll(){
   if(!meId) return;
@@ -1566,7 +1572,7 @@ function renderAll(){
 function renderMeCap(){
   const m = me(); if(!m) return;
   const roleTag = m.role==="admin" ? '<span class="tag tag-admin">ADMIN</span>' : (isDefaultMgr()? '<span class="tag tag-mgr">ผู้จัดการ</span>':"");
-  $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="nm">${esc(m.name)}</span>${roleTag}`;
+  $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="nm">${esc(m.name)}</span>${proBadge(m.id)}${roleTag}`;
 }
 
 /* =====================================================
@@ -1809,7 +1815,7 @@ function renderOpenSession(s){
           const self = a.memberId===meId;
           return `<div class="att-row ${self?"me":""}" ${self? `onclick="openAttNote('${s.id}')"`:""}>
             <span class="no">${i+1}.</span><span class="av">${m.emoji}</span>
-            <span class="nm">${esc(m.name)}${self? ' <span class="muted">(คุณ)</span>':""}</span>
+            <span class="nm">${esc(m.name)}${proBadge(m.id)}${self? ' <span class="muted">(คุณ)</span>':""}</span>
             <span class="nt notx">${a.note? "💬 "+esc(a.note) : (self? `<span class="muted" style="color:var(--ink-soft);">✏️ แตะเพื่อเขียนโน้ต…</span>`:"")}</span>
           </div>`;
         }).join("")}
@@ -2479,7 +2485,7 @@ function renderSummaryHtml(s){
     const wr = v.sets>0 ? Math.round(v.w/v.sets*100) : null;
     const df = v.pf-v.pa;
     return `<tr style="cursor:pointer;" onclick="openPlayerStats('${a.memberId}')">
-      <td>${m.emoji} ${esc(m.name)} ${mvps.includes(m.id)?"⭐":""} <span class="muted" style="font-size:11px;">👁️</span></td>
+      <td>${m.emoji} ${esc(m.name)}${proBadge(m.id)} ${mvps.includes(m.id)?"⭐":""} <span class="muted" style="font-size:11px;">👁️</span></td>
       <td style="text-align:center;">${v.sets}</td>
       <td style="text-align:center; color:var(--lime); font-weight:700;">${v.w}</td>
       <td style="text-align:center; color:var(--coral);">${v.l}</td>
@@ -2620,6 +2626,17 @@ function renderPaymentHtml(s){
       <div class="muted">คอร์ท ${money(courtCost(s))} + ลูก ${money(shuttleCost(s))} • จ่ายแล้ว ${paidCount}/${s.attendees.length} คน</div>
     </div>
 
+    ${(()=>{ // 💳 วิธีการจ่ายเงิน (ข้อความจากผู้จัดการ + QR code)
+      const pn = (db.settings&&db.settings.payNote)||"";
+      const pq = (db.settings&&db.settings.payQR)||"";
+      if(!pn && !pq && !canMg) return "";
+      return `<div class="card" style="margin-bottom:12px;">
+        <div class="row"><h3 style="margin:0;">💳 วิธีการจ่ายเงิน</h3>${canMg? `<button class="btn btn-ghost btn-sm" onclick="openPayInfoEdit('${s.id}')">✏️ แก้ไข</button>`:""}</div>
+        ${pn? `<div class="notx" style="white-space:pre-wrap; font-size:13.5px; line-height:1.65; margin-top:6px;">${esc(pn)}</div>`
+             : (canMg? `<div class="muted" style="font-size:12px; margin-top:6px;">ยังไม่มีข้อความวิธีจ่าย — กด ✏️ แก้ไข เพื่อใส่ เช่น เลขบัญชี/พร้อมเพย์ และแนบรูป QR</div>`:"")}
+        ${pq? `<img src="${pq}" style="width:100%; max-width:240px; display:block; margin:10px auto 0; border-radius:12px; cursor:pointer; background:#fff;" onclick="viewPayQR()" alt="QR"><div class="muted" style="text-align:center; font-size:10.5px; margin-top:4px;">แตะรูปเพื่อขยาย QR</div>`:""}
+      </div>`;
+    })()}
     ${canMg? `<div class="frow" style="margin-bottom:10px;">
       <button class="btn btn-sm ${s.costMode!=="hours"?"btn-lime":"btn-ghost"}" style="flex:1;" onclick="setCostMode('${s.id}','equal')">หารเท่ากัน</button>
       <button class="btn btn-sm ${s.costMode==="hours"?"btn-lime":"btn-ghost"}" style="flex:1;" onclick="setCostMode('${s.id}','hours')">หารตามชั่วโมง</button>
@@ -2850,6 +2867,60 @@ async function ocrSlipAmounts(dataUrl){
     .map(x=> parseFloat(x[0].replace(/,/g,"")))
     .filter(n=> n>0 && n<1000000);
   return [...new Set(nums)];
+}
+/* ---------- 💳 วิธีการจ่ายเงิน + QR code (Admin/ผู้จัดการแก้ไขได้ ใช้ร่วมกันทุกนัด) ---------- */
+function openPayInfoEdit(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!db.settings) db.settings = {};
+  window.__qrDraft = db.settings.payQR || "";
+  modal(`
+    <div class="modal-head"><h3>💳 แก้ไขวิธีการจ่ายเงิน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0; font-size:12px;">ข้อความและ QR นี้จะแสดงบนหน้าการจ่ายเงินของทุกนัด</p>
+    <div class="field"><label>ข้อความวิธีจ่าย (เช่น เลขบัญชี / พร้อมเพย์ / กติกาการโอน)</label>
+      <textarea id="payNoteEdit" rows="4" maxlength="300" placeholder="เช่น โอนพร้อมเพย์ 08x-xxx-xxxx (ชื่อบัญชี …) หรือสแกน QR ด้านล่าง แล้วแนบสลิปในแอป" style="width:100%; background:rgba(255,255,255,.06); color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:10px; font-family:inherit; font-size:14px; resize:none;">${esc(db.settings.payNote||"")}</textarea></div>
+    <div id="qrZone">${window.__qrDraft? `<img src="${window.__qrDraft}" style="width:100%; max-width:220px; display:block; margin:0 auto 8px; border-radius:12px; background:#fff;">`:`<div class="muted" style="text-align:center; font-size:12px; margin-bottom:8px;">ยังไม่มีรูป QR</div>`}</div>
+    <div class="frow">
+      <label class="btn btn-ghost btn-sm" style="flex:1; text-align:center;">📷 ${window.__qrDraft? "เปลี่ยน":"แนบ"}รูป QR<input type="file" accept="image/*" style="display:none;" onchange="handlePayQRFile(this)"></label>
+      ${window.__qrDraft? `<button class="btn btn-danger btn-sm" style="flex:1;" onclick="clearPayQR()">🗑️ ลบรูป QR</button>`:""}
+    </div>
+    <div style="height:12px;"></div>
+    <button class="btn btn-lime btn-block" onclick="savePayInfo('${sid}')">💾 บันทึก</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับโดยไม่บันทึก</button>`);
+}
+async function handlePayQRFile(inp){
+  const f = inp.files && inp.files[0]; if(!f) return;
+  toast("กำลังเตรียมรูป QR…");
+  try{
+    let dataUrl = await compressImage(f, 600, 0.8);
+    if(dataUrl.length > 300000) dataUrl = await compressImage(f, 450, 0.7);
+    if(dataUrl.length > 300000) return toast("รูปใหญ่เกินไป — ลองครอปเฉพาะส่วน QR", true);
+    window.__qrDraft = dataUrl;
+    const z = $("qrZone");
+    if(z) z.innerHTML = `<img src="${dataUrl}" style="width:100%; max-width:220px; display:block; margin:0 auto 8px; border-radius:12px; background:#fff;">`;
+    toast("แนบรูป QR แล้ว — อย่าลืมกดบันทึก");
+  }catch(e){ toast("อ่านไฟล์รูปไม่สำเร็จ ลองรูปอื่น", true); }
+}
+function clearPayQR(){
+  window.__qrDraft = "";
+  const z = $("qrZone");
+  if(z) z.innerHTML = `<div class="muted" style="text-align:center; font-size:12px; margin-bottom:8px;">ยังไม่มีรูป QR</div>`;
+  toast("ลบรูป QR แล้ว — อย่าลืมกดบันทึก");
+}
+async function savePayInfo(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!db.settings) db.settings = {};
+  db.settings.payNote = (($("payNoteEdit")||{}).value||"").trim().slice(0,300);
+  db.settings.payQR = window.__qrDraft || "";
+  await storeSave(); renderAll(); openPayment(sid);
+  toast("บันทึกวิธีการจ่ายเงินแล้ว 💳");
+}
+function viewPayQR(){
+  const pq = db.settings && db.settings.payQR; if(!pq) return;
+  modal(`
+    <div class="modal-head"><h3>💳 สแกนเพื่อจ่าย</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <img src="${pq}" style="width:100%; border-radius:14px; background:#fff;">
+    ${db.settings.payNote? `<div class="notx muted" style="white-space:pre-wrap; font-size:12.5px; margin-top:10px;">${esc(db.settings.payNote)}</div>`:""}`);
 }
 function openPaySlip(sid, mid){
   const inp = document.createElement("input");
@@ -3194,7 +3265,7 @@ function renderMembers(){
     return `<div class="mem-row">
       <div class="rank-av" style="cursor:pointer;" onclick="openPlayerStats('${m.id}')">${m.emoji}</div>
       <div style="flex:1; cursor:pointer;" onclick="openPlayerStats('${m.id}')">
-        <div style="font-weight:700;">${esc(m.name)} ${m.id===meId?'<span class="muted">(คุณ)</span>':""}</div>
+        <div style="font-weight:700;">${esc(m.name)}${proBadge(m.id)} ${m.id===meId?'<span class="muted">(คุณ)</span>':""}</div>
         ${info? `<div class="muted" style="font-size:11.5px; margin-top:1px;">${info}</div>`:""}
         <div style="margin-top:2px;">${tags}</div>
       </div>
@@ -3329,7 +3400,7 @@ function pairStats(){
   return Object.values(p).map(x=>({...x, sets:x.w+x.l, wr:(x.w+x.l)>0? x.w/(x.w+x.l):0}));
 }
 /* =====================================================
-   PRO MODE: ค่ามือ (Elo) + ระดับมือ S/N/P
+   PRO MODE: แต้มมือ (Elo) + ระดับมือ S/N/P
    - คำนวณจากประวัติเซ็ตทั้งหมด (นัดจบแล้ว + นัดกำลังตี) เรียงตามเวลา
    - แต้มเริ่มต้นอ้างอิงสถิติเดิม: ใครมียอดยกมา (baseW/baseL) ≥10 เซ็ต
      จะเริ่มสูง/ต่ำกว่า 1000 ตาม Win% เดิม (จำกัด ±120)
@@ -3369,6 +3440,20 @@ function handLevel(e){
   if(e.r>=LV_N) return { lv:"N", color:"var(--blue)", next:LV_P-e.r };
   return { lv:"S", color:"var(--amber)", next:LV_N-e.r };
 }
+/* eloAll แบบ memoize สั้นๆ กันคำนวณซ้ำเมื่อ render ป้ายชื่อหลายจุดพร้อมกัน */
+let __eloMemo = null, __eloMemoAt = 0;
+function eloCached(){
+  if(!__eloMemo || Date.now()-__eloMemoAt > 2000){ __eloMemo = eloAll(); __eloMemoAt = Date.now(); }
+  return __eloMemo;
+}
+/* ป้าย Pro(ระดับมือ) ต่อท้ายชื่อสมาชิกที่เป็น Pro — เช่น Pro(N), ยังไม่ครบเซ็ตขั้นต่ำ = Pro(–) */
+function proBadge(id){
+  const m = mem(id);
+  if(!m || !m.pro) return "";
+  const lv = handLevel(eloCached()[id]);
+  const t = lv.lv==="รอประเมิน" ? "–" : lv.lv;
+  return ` <span class="pro-badge">Pro(${t})</span>`;
+}
 /* ---------- วงจร Turn Pro: ขอ → Admin อนุมัติ → เข้าโหมด Pro / ออกเอง / Admin เอาออก ---------- */
 function proPending(){ return db.members.filter(m=>m.proReq && !m.pro); }
 function openTurnPro(){
@@ -3386,8 +3471,8 @@ function openTurnPro(){
     <div class="modal-head"><h3>⚡ Turn Pro — โหมดพัฒนาฝีมือ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     <p style="margin-top:0;">โหมด Pro เพิ่มหน้า <b>⚡ Pro</b> สำหรับคนที่อยากพัฒนาฝีมือจริงจัง:</p>
     <p class="muted" style="font-size:13px; line-height:1.7;">
-    🎯 <b>ค่ามือ</b> — แต้มฝีมือที่ขึ้นลงตามผลตีจริง <b>ชนะทีมมือดีได้แต้มเยอะ ชนะทีมมือรองได้แต้มน้อย</b> (การเลือกคู่ตีจึงมีผลต่อคะแนนของคุณ)<br>
-    🏅 <b>ระดับมือ S / N / P</b> — เลื่อนขั้นอัตโนมัติตามค่ามือ เริ่มต้นจากสถิติเดิมของคุณ<br>
+    🎯 <b>แต้มมือ</b> — แต้มฝีมือที่ขึ้นลงตามผลตีจริง <b>ชนะทีมมือดีได้แต้มเยอะ ชนะทีมมือรองได้แต้มน้อย</b> (การเลือกคู่ตีจึงมีผลต่อคะแนนของคุณ)<br>
+    🏅 <b>ระดับมือ S / N / P</b> — เลื่อนขั้นอัตโนมัติตามแต้มมือ เริ่มต้นจากสถิติเดิมของคุณ<br>
     🎲 <b>จัดทีมสูสี</b> — เลือก 4 คน ระบบเสนอการจับคู่ที่สูสีที่สุด<br>
     ⏳ <b>คิวแฟร์</b> — เห็นว่าใครตีน้อยสุด ควรได้ลงคิวก่อน</p>
     <p class="muted" style="font-size:12px;">คำขอจะถูกส่งให้ Admin ตรวจอนุมัติก่อน • ออกจากโหมด Pro เองได้ทุกเมื่อ สถิติแพ้ชนะปกติไม่เปลี่ยนแปลง</p>
@@ -3507,7 +3592,7 @@ function renderRank(){
       <div class="rank-no ${i<3?"r"+(i+1):""}">${i<3? ["🥇","🥈","🥉"][i] : i+1}</div>
       <div class="rank-av">${x.emoji}</div>
       <div style="flex:1;">
-        <div style="font-weight:700; font-size:13.5px;">${esc(x.name)} <span class="muted" style="font-size:10.5px;">👁️ แตะดูรายละเอียด</span></div>
+        <div style="font-weight:700; font-size:13.5px;">${esc(x.name)}${proBadge(x.id)} <span class="muted" style="font-size:10.5px;">👁️ แตะดูรายละเอียด</span></div>
         <div class="wbar"><i style="width:${Math.round(x.wr*100)}%;"></i></div>
       </div>
       <div style="text-align:right;">
@@ -3605,7 +3690,7 @@ function openPlayerStats(id){
       <div class="set-meta">${fmtDateShort(it.date)} • คอร์ท ${esc(it.court)} • ${it.won? '<span style="color:var(--lime); font-weight:700;">ชนะ</span>' : '<span style="color:var(--coral); font-weight:700;">แพ้</span>'} ${Math.abs(it.myS-it.otS)} แต้ม</div>
     </div>`).join("");
   modal(`
-    <div class="modal-head"><h3>${m.emoji} สถิติของ ${esc(m.name)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="modal-head"><h3>${m.emoji} สถิติของ ${esc(m.name)}${proBadge(m.id)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     <div class="statgrid" style="margin:0 0 12px;">
       <div class="statbox"><div class="v" style="color:var(--lime);">${c.w}</div><div class="l">ชนะ (เซ็ต)</div></div>
       <div class="statbox"><div class="v" style="color:var(--coral);">${c.l}</div><div class="l">แพ้ (เซ็ต)</div></div>
@@ -3690,7 +3775,7 @@ function renderPro(){
       <div class="sess-date">${m.emoji} ${esc(m.name)}</div>
       <div class="statgrid" style="margin-top:10px;">
         <div class="statbox"><div class="v" style="color:${lv.color}; font-size:26px;">${lv.lv}</div><div class="l">ระดับมือ</div></div>
-        <div class="statbox"><div class="v" style="color:var(--lime);">${my.r}</div><div class="l">ค่ามือ</div></div>
+        <div class="statbox"><div class="v" style="color:var(--lime);">${my.r}</div><div class="l">แต้มมือ</div></div>
         <div class="statbox"><div class="v">${last.length? w10+"-"+(last.length-w10):"-"}</div><div class="l">ฟอร์ม ${last.length} เซ็ตล่าสุด</div></div>
       </div>
       <div class="muted" style="margin-top:10px; font-size:12.5px;">
@@ -3702,12 +3787,12 @@ function renderPro(){
     </div>
 
     <div class="card">
-      <h3>🏅 อันดับค่ามือ (เฉพาะสมาชิก Pro)</h3>
+      <h3>🏅 อันดับแต้มมือ (เฉพาะสมาชิก Pro)</h3>
       <table class="tbl">
-        <tr><th></th><th>สมาชิก</th><th style="text-align:center;">ระดับ</th><th style="text-align:center;">ค่ามือ</th><th style="text-align:center;">เซ็ต</th></tr>
+        <tr><th></th><th>สมาชิก</th><th style="text-align:center;">ระดับ</th><th style="text-align:center;">แต้มมือ</th><th style="text-align:center;">เซ็ต</th></tr>
         ${proRows}
       </table>
-      <p class="muted" style="margin:8px 0 0; font-size:11px;">ชนะทีมค่ามือสูงกว่า = ได้แต้มเยอะ • ชนะทีมค่ามือต่ำกว่า = ได้แต้มน้อย — การเลือกคู่ตีจึงมีผลต่อคะแนน</p>
+      <p class="muted" style="margin:8px 0 0; font-size:11px;">ชนะทีมแต้มมือสูงกว่า = ได้แต้มเยอะ • ชนะทีมแต้มมือต่ำกว่า = ได้แต้มน้อย — การเลือกคู่ตีจึงมีผลต่อคะแนน</p>
     </div>
 
     <div class="card">
@@ -3723,10 +3808,10 @@ function renderPro(){
       <h3>📐 กติกาโหมด Pro</h3>
       <p class="muted" style="font-size:12.5px; line-height:1.75; margin:0;">
       • ทุกคนเริ่มที่ ${ELO_START} แต้ม (ใครมีสถิติยกมาจากไฟล์เดิม จะเริ่มสูง/ต่ำกว่านี้ตาม Win% เดิม)<br>
-      • ชนะ = แต้มขึ้น แพ้ = แต้มลง — <b>มาก/น้อยขึ้นกับค่ามือของคู่ต่อสู้</b> เหมือนต่อยมวย: ชนะแชมป์ได้เข็มขัด ชนะมือใหม่ได้แค่คำชม<br>
+      • ชนะ = แต้มขึ้น แพ้ = แต้มลง — <b>มาก/น้อยขึ้นกับแต้มมือของคู่ต่อสู้</b> เหมือนต่อยมวย: ชนะแชมป์ได้เข็มขัด ชนะมือใหม่ได้แค่คำชม<br>
       • เซ็ตคู่ใช้ค่าเฉลี่ยของทีม แล้วแบ่งแต้มให้ทั้งคู่เท่ากัน<br>
-      • ระดับมือ: <b style="color:var(--amber);">S</b> &lt; ${LV_N} ≤ <b style="color:var(--blue);">N</b> &lt; ${LV_P} ≤ <b style="color:var(--lime);">P</b> — เลื่อนขั้น/ลดขั้นอัตโนมัติตามค่ามือ (ต้องตีครบ ${LV_MIN_SETS} เซ็ตก่อนจึงจัดระดับ)<br>
-      • ค่ามือคำนวณจากเซ็ตที่บันทึกในแอปเท่านั้น และแสดงเฉพาะสมาชิก Pro ด้วยกัน</p>
+      • ระดับมือ: <b style="color:var(--amber);">S</b> &lt; ${LV_N} ≤ <b style="color:var(--blue);">N</b> &lt; ${LV_P} ≤ <b style="color:var(--lime);">P</b> — เลื่อนขั้น/ลดขั้นอัตโนมัติตามแต้มมือ (ต้องตีครบ ${LV_MIN_SETS} เซ็ตก่อนจึงจัดระดับ)<br>
+      • แต้มมือคำนวณจากเซ็ตที่บันทึกในแอปเท่านั้น และแสดงเฉพาะสมาชิก Pro ด้วยกัน</p>
     </div>`;
 }
 function proPickToggle(id){
