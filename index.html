@@ -333,6 +333,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
     <div class="view" id="v-members"></div>
     <div class="view" id="v-rank"></div>
     <div class="view" id="v-history"></div>
+    <div class="view" id="v-pro"></div>
   </div>
 
   <div class="bottomnav"><div class="bottomnav-in">
@@ -340,6 +341,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
     <button class="bn-item" data-v="members" onclick="go('members')"><span class="ic">👥</span>สมาชิก</button>
     <button class="bn-item" data-v="rank" onclick="go('rank')"><span class="ic">🏆</span>สถิติ</button>
     <button class="bn-item" data-v="history" onclick="go('history')"><span class="ic">🗂️</span>ประวัติ</button>
+    <button class="bn-item" data-v="pro" id="bnPro" style="display:none;" onclick="go('pro')"><span class="ic">⚡</span>Pro</button>
   </div></div>
 </div>
 
@@ -763,6 +765,39 @@ const I18N = {
 "◀️ ย้อนกลับหน้าแรก":"◀️ Back to home",
 "🤝 Best Partner — สถิติกับคู่หู":"🤝 Best Partner — with partners",
 "(เรียงจากชนะมากสุด)":"(most wins first)",
+"⚡ โหมด Pro":"⚡ Pro mode",
+"ออกจากโหมด Pro":"Leave Pro mode",
+"ระดับมือ":"Level",
+"ค่ามือ":"Rating",
+"🏅 อันดับค่ามือ (เฉพาะสมาชิก Pro)":"🏅 Rating leaderboard (Pro members)",
+"🎲 จัดทีมให้สูสี":"🎲 Balance teams",
+"(เลือก 4 คน)":"(pick 4 players)",
+"⏳ คิวแฟร์ — นัดวันนี้":"⏳ Fair queue — today",
+"(ตีน้อยสุดควรได้ลงคิวก่อน)":"(fewest sets goes next)",
+"ลงก่อนเลย!":"up next!",
+"📐 กติกาโหมด Pro":"📐 Pro mode rules",
+"⚡ จัดการโหมด Pro":"⚡ Manage Pro mode",
+"⚡ Turn Pro — โหมดพัฒนาฝีมือ":"⚡ Turn Pro — improvement mode",
+"📨 ส่งคำขอ Turn Pro ให้ Admin":"📨 Send Turn Pro request to Admin",
+"◀️ ยังก่อน":"◀️ Not yet",
+"⏳ คำขอรออนุมัติ":"⏳ Pending requests",
+"⚡ สมาชิก Pro ปัจจุบัน":"⚡ Current Pro members",
+"− เอาออกจาก Pro":"− Remove from Pro",
+"รอประเมิน":"unrated",
+"กำลังมาแรง":"on fire",
+"ฟอร์มตก":"cooling off",
+"ทรงตัว":"steady",
+"แต้มต่าง":"point diff",
+"คิดจากเซ็ตชนะ ถ้าเสมอใช้แต้มต่างตัดสิน":"based on set wins; point diff breaks ties",
+"(เรียงจากชนะมากสุด • ± = แต้มได้−แต้มเสีย)":"(most wins first • ± = points for−against)",
+"🎖️ ขาประจำ — ใครมาบ่อยสุด":"🎖️ Regulars — most sessions attended",
+"(ไม่นับ Admin • ไว้พิจารณารางวัล เช่น ตีฟรี)":"(Admin excluded • for rewards e.g. one free session)",
+"ขาประจำ":"regular",
+"เดือนนี้ยังไม่มีคนมาตี":"no attendance this month yet",
+"💬 ข้อความทั่วไป":"💬 General message",
+"📢 ประกาศ":"📢 Announcement",
+"หน้าแรกจะแสดง 2 ข้อความ: 📢 ประกาศล่าสุด และ 💬 ข้อความทั่วไปล่าสุด":"Home shows 2 messages: 📢 latest announcement and 💬 latest general message",
+"ส่งประกาศแล้ว 📢":"Announcement posted 📢",
 "💰 หน้าจ่ายเงิน":"💰 Payments",
 "กำหนดเอง":"custom",
 "อัตโนมัติ":"auto",
@@ -1280,22 +1315,31 @@ function costSplit(s){
 }
 function sessionStats(s){
   const st = {};
-  (s.attendees||[]).forEach(a=> st[a.memberId] = {w:0,l:0,sets:0});
+  const blank = ()=>({w:0,l:0,sets:0,pf:0,pa:0});   // pf=แต้มได้ pa=แต้มเสีย
+  (s.attendees||[]).forEach(a=> st[a.memberId] = blank());
   (s.sets||[]).forEach(x=>{
     const w = setWinner(x); if(!w) return;
-    const win = w==="A"? x.teamA : x.teamB;
+    const win  = w==="A"? x.teamA : x.teamB;
     const lose = w==="A"? x.teamB : x.teamA;
-    win.forEach(id=>{ if(!st[id]) st[id]={w:0,l:0,sets:0}; st[id].w++; st[id].sets++; });
-    lose.forEach(id=>{ if(!st[id]) st[id]={w:0,l:0,sets:0}; st[id].l++; st[id].sets++; });
+    const wS = w==="A"? Number(x.scoreA)||0 : Number(x.scoreB)||0;
+    const lS = w==="A"? Number(x.scoreB)||0 : Number(x.scoreA)||0;
+    win.forEach(id=>{ if(!st[id]) st[id]=blank(); st[id].w++; st[id].sets++; st[id].pf+=wS; st[id].pa+=lS; });
+    lose.forEach(id=>{ if(!st[id]) st[id]=blank(); st[id].l++; st[id].sets++; st[id].pf+=lS; st[id].pa+=wS; });
   });
   return st;
 }
+/* MVP: เซ็ตชนะมากสุดก่อน — ถ้าเสมอ ใช้แต้มต่างรวม (ได้−เสีย) ตัดสิน ถ้ายังเสมออีกเป็น MVP ร่วม */
 function sessionMVP(s){
   const st = sessionStats(s);
-  let max = 0;
-  Object.values(st).forEach(v=>{ if(v.w>max) max=v.w; });
-  if(max===0) return [];
-  return Object.keys(st).filter(id=> st[id].w===max);
+  const ids = Object.keys(st).filter(id=> st[id].w>0);
+  if(!ids.length) return [];
+  const key = id => [st[id].w, st[id].pf-st[id].pa];
+  let best = null;
+  ids.forEach(id=>{
+    const k = key(id);
+    if(!best || k[0]>best[0] || (k[0]===best[0] && k[1]>best[1])) best = k;
+  });
+  return ids.filter(id=>{ const k=key(id); return k[0]===best[0] && k[1]===best[1]; });
 }
 
 /* =====================================================
@@ -1504,7 +1548,11 @@ function backBar(){
 }
 function renderAll(){
   if(!meId) return;
-  renderMeCap(); renderPlay(); renderMembers(); renderRank(); renderHistory();
+  const isPro = !!(me() && me().pro);
+  const bp = $("bnPro"); if(bp) bp.style.display = isPro? "" : "none";
+  if(!isPro && curView==="pro") curView = "play";
+  renderMeCap(); renderPlay(); renderMembers(); renderRank(); renderHistory(); renderPro();
+  document.querySelectorAll(".bn-item").forEach(b=> b.classList.toggle("on", b.dataset.v===curView));
   document.querySelectorAll(".view").forEach(el=> el.classList.toggle("on", el.id==="v-"+curView));
   document.querySelectorAll(".langLbl").forEach(el=> el.textContent = LANG==="en" ? "ไทย" : "EN");
   translateDom($("appView"));
@@ -1524,10 +1572,13 @@ function renderPlay(){
   let html = "";
 
   // 📢 กระดานสื่อสารก๊วน — ข้อความล่าสุด (จากใครก็ได้) ขึ้นก่อน กล่องกระพริบ + ปุ่มเขียนข้อความ
-  const ann = boardAnn();
+  const annB = boardLatest(true), msgB = boardLatest(false);
   html += `<div class="board-row">
-    ${ann? `<div class="banner-board blink" onclick="openBoard()">${isMgrRole(ann.from)?"📢":"💬"} <b>${emojiOf(ann.from)} ${esc(nameOf(ann.from))}:</b> <span class="bmsg notx">${esc(ann.text)}</span> <span class="muted" style="font-size:11px;">• ${boardWhen(ann.at)}</span></div>`
-         : `<div class="banner-board" onclick="openBoard()" style="color:var(--ink-soft);">📢 ยังไม่มีประกาศจากผู้จัดการ — แตะเพื่อเปิดกระดานสื่อสารก๊วน</div>`}
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
+      ${annB? `<div class="banner-board blink" onclick="openBoard()">📢 <b>${emojiOf(annB.from)} ${esc(nameOf(annB.from))}:</b> <span class="bmsg notx">${esc(annB.text)}</span> <span class="muted" style="font-size:11px;">• ${boardWhen(annB.at)}</span></div>`
+           : `<div class="banner-board" onclick="openBoard()" style="color:var(--ink-soft);">📢 ยังไม่มีประกาศจากผู้จัดการ — แตะเพื่อเปิดกระดานสื่อสารก๊วน</div>`}
+      ${msgB? `<div class="banner-board" onclick="openBoard()" style="background:rgba(255,255,255,.05); border-color:var(--line);">💬 <b>${emojiOf(msgB.from)} ${esc(nameOf(msgB.from))}:</b> <span class="notx">${esc(msgB.text)}</span> <span class="muted" style="font-size:11px;">• ${boardWhen(msgB.at)}</span></div>`:""}
+    </div>
     <button class="board-write" onclick="openBoard()">✍️ เขียน</button>
   </div>`;
 
@@ -1535,6 +1586,11 @@ function renderPlay(){
   const pend = pendingApprovals();
   if(pend.length){
     html += `<div class="banner-approve" onclick="openPendingList()">💰 <b>มีการแจ้งชำระเงินรออนุมัติ ${pend.length} รายการ</b> — แตะเพื่อตรวจและกดอนุมัติ</div>`;
+  }
+
+  // ⚡ แจ้งเตือน Admin: มีคำขอ Turn Pro รออนุมัติ
+  if(isAdmin() && proPending().length){
+    html += `<div class="banner-approve" onclick="openProAdmin()">⚡ <b>มีคำขอ Turn Pro รออนุมัติ ${proPending().length} รายการ</b> — แตะเพื่อตรวจและกดอนุมัติ</div>`;
   }
 
   if(!s){
@@ -1606,6 +1662,7 @@ function openManageMenu(){
     <div class="row" style="margin-bottom:12px;"><span class="muted">การเก็บข้อมูล (อัตโนมัติ)</span><b style="font-size:13px;">${syncLabel()}</b></div>
     ${canOpenSession()? `<button class="btn btn-lime btn-block" onclick="closeModal(); openNewSession();">📅 เปิดนัดตีใหม่ / เพิ่มนัด</button><div style="height:8px;"></div>`:""}
     ${mgr? `<button class="btn btn-ghost btn-block" onclick="openDelegate()">👑 มอบหมายผู้จัดการ</button><div style="height:8px;"></div>`:""}
+    ${isAdmin()? `<button class="btn btn-ghost btn-block" onclick="openProAdmin()">⚡ จัดการโหมด Pro${proPending().length? " ("+proPending().length+" คำขอ)":""}</button><div style="height:8px;"></div>`:""}
     <button class="btn btn-ghost btn-block" onclick="openSyncInfo()">☁️ การเชื่อมต่อ & ซิงก์</button>
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="exportExcel(false)">📥 บันทึกไฟล์ Excel</button>
@@ -1628,42 +1685,63 @@ function boardAnn(){
   const list = db.board||[];
   return list.length? list[list.length-1] : null;
 }
+/* ประเภทข้อความ: "ann" = ประกาศ, "msg" = ทั่วไป — ข้อความเก่าไม่มี type ให้ถือว่าเป็นประกาศถ้าผู้ส่งเป็น Admin/ผู้จัดการ */
+function boardIsAnn(b){ return b.type? b.type==="ann" : isMgrRole(b.from); }
+function boardLatest(ann){
+  const list = db.board||[];
+  for(let i=list.length-1; i>=0; i--){ if(boardIsAnn(list[i])===ann) return list[i]; }
+  return null;
+}
 function boardWhen(ts){
   try{ return new Date(ts).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; }
 }
 function openBoard(){
+  window.__brdType = "msg";   // ค่าเริ่มต้น: ข้อความทั่วไป
   const list = (db.board||[]).slice(-60).reverse();   // ข้อความล่าสุดขึ้นก่อน
   const rows = list.map(b=>{
     const m = mem(b.from);
     const own = b.from===meId;
-    const annCls = isMgrRole(b.from)? "ann":"";
+    const annCls = boardIsAnn(b)? "ann":"";
     return `<div class="brd-msg ${own?"own":""} ${annCls}">
       <div class="brd-head"><b>${m? m.emoji+" "+esc(m.name):"?"}</b>
-        ${isMgrRole(b.from)? `<span class="tag tag-mgr" style="font-size:9.5px; padding:1px 6px;">ประกาศ</span>`:""}
+        ${boardIsAnn(b)? `<span class="tag tag-mgr" style="font-size:9.5px; padding:1px 6px;">ประกาศ</span>`:""}
         <span style="flex:1;">• ${boardWhen(b.at)}</span>
         ${(own||isAdmin())? `<span style="color:var(--coral); cursor:pointer; font-weight:700;" onclick="delBoardMsg('${b.id}')">✕</span>`:""}
       </div>
       <div class="notx">${esc(b.text)}</div>
     </div>`;
   }).join("") || `<div class="empty"><div class="big">💬</div>ยังไม่มีข้อความ — เริ่มคุยกันเลย</div>`;
+  const mgr = isMgrRole(meId);
   modal(`
     <div class="modal-head"><h3>📢 กระดานสื่อสารก๊วน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0; font-size:11.5px;">Admin/ผู้จัดการเขียนแล้วจะขึ้นเป็นประกาศกระพริบบนหน้าแรกของทุกคน</p>
-    <div id="brdList" style="max-height:44vh; overflow:auto; margin-bottom:10px;">${rows}</div>
+    <p class="muted" style="margin-top:0; font-size:11.5px;">หน้าแรกจะแสดง 2 ข้อความ: 📢 ประกาศล่าสุด และ 💬 ข้อความทั่วไปล่าสุด</p>
+    <div id="brdList" style="max-height:40vh; overflow:auto; margin-bottom:10px;">${rows}</div>
+    <div class="frow" style="margin-bottom:8px;">
+      <button id="btMsg" class="btn btn-sm btn-lime" style="flex:1;" onclick="setBrdType('msg')">💬 ข้อความทั่วไป</button>
+      <button id="btAnn" class="btn btn-sm btn-ghost" style="flex:1; ${mgr?"":"opacity:.45;"}" onclick="setBrdType('ann')">📢 ประกาศ${mgr?"":" 🔒"}</button>
+    </div>
     <div class="field"><textarea id="brdInp" rows="2" maxlength="300" placeholder="พิมพ์ข้อความถึงก๊วน…" style="width:100%; background:rgba(255,255,255,.06); color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:10px; font-family:inherit; font-size:14px; resize:none;"></textarea></div>
     <button class="btn btn-lime btn-block" onclick="postBoardMsg()">📨 ส่งข้อความ</button>`);
   const el = $("brdList"); if(el) el.scrollTop = 0;   // ล่าสุดอยู่บนสุด
+}
+function setBrdType(t){
+  if(t==="ann" && !isMgrRole(meId)) return toast("ประกาศส่งได้เฉพาะ Admin/ผู้จัดการ — สมาชิกส่งข้อความทั่วไปได้เลย", true);
+  window.__brdType = t;
+  const bm = $("btMsg"), ba = $("btAnn");
+  if(bm) bm.className = "btn btn-sm " + (t==="msg"? "btn-lime":"btn-ghost");
+  if(ba) ba.className = "btn btn-sm " + (t==="ann"? "btn-lime":"btn-ghost");
 }
 async function postBoardMsg(){
   const inp = $("brdInp"); if(!inp) return;
   const v = inp.value.trim();
   if(!v) return toast("พิมพ์ข้อความก่อนนะ", true);
+  const type = (window.__brdType==="ann" && isMgrRole(meId))? "ann" : "msg";
   db.board = db.board||[];
-  db.board.push({ id:uid(), from:meId, text:v.slice(0,300), at:Date.now() });
+  db.board.push({ id:uid(), from:meId, text:v.slice(0,300), at:Date.now(), type });
   if(db.board.length>200) db.board = db.board.slice(-200);
   await storeSave();
   closeModal(); renderAll();   // ส่งแล้วปิดกล่องอัตโนมัติ
-  toast("ส่งข้อความแล้ว 📨");
+  toast(type==="ann"? "ส่งประกาศแล้ว 📢" : "ส่งข้อความแล้ว 📨");
 }
 async function delBoardMsg(id){
   const b = (db.board||[]).find(x=>x.id===id); if(!b) return;
@@ -2384,15 +2462,22 @@ function renderSummaryHtml(s){
   const mvps = sessionMVP(s);
   const canMg = canManage(s);
 
-  const statRows = s.attendees.map(a=>{
+  const statRows = [...s.attendees]
+    .sort((a,b)=>{
+      const va=st[a.memberId]||{w:0,pf:0,pa:0}, vb=st[b.memberId]||{w:0,pf:0,pa:0};
+      return vb.w-va.w || (vb.pf-vb.pa)-(va.pf-va.pa);
+    })
+    .map(a=>{
     const m = mem(a.memberId); if(!m) return "";
-    const v = st[a.memberId]||{w:0,l:0,sets:0};
+    const v = st[a.memberId]||{w:0,l:0,sets:0,pf:0,pa:0};
     const wr = v.sets>0 ? Math.round(v.w/v.sets*100) : null;
+    const df = v.pf-v.pa;
     return `<tr style="cursor:pointer;" onclick="openPlayerStats('${a.memberId}')">
       <td>${m.emoji} ${esc(m.name)} ${mvps.includes(m.id)?"⭐":""} <span class="muted" style="font-size:11px;">👁️</span></td>
       <td style="text-align:center;">${v.sets}</td>
       <td style="text-align:center; color:var(--lime); font-weight:700;">${v.w}</td>
       <td style="text-align:center; color:var(--coral);">${v.l}</td>
+      <td style="text-align:center; font-weight:700; color:${df>0?"var(--lime)":df<0?"var(--coral)":"var(--ink-soft)"};">${df>0?"+":""}${df}</td>
       <td style="text-align:center;">${wr===null?"-":wr+"%"}</td>
     </tr>`;
   }).join("");
@@ -2404,6 +2489,7 @@ function renderSummaryHtml(s){
     ${mvps.length? `<div class="mvp-band"><span class="mvp-star">⭐</span><div style="flex:1;">
       <div class="mvp-cap">MVP ประจำนัด</div>
       <div class="mvp-name notx">${mvps.map(id=>emojiOf(id)+" "+esc(nameOf(id))).join(", ")}</div>
+      <div class="muted" style="font-size:11px; margin-top:2px;">ชนะ ${st[mvps[0]].w} เซ็ต • แต้มต่าง ${st[mvps[0]].pf-st[mvps[0]].pa>0?"+":""}${st[mvps[0]].pf-st[mvps[0]].pa} — คิดจากเซ็ตชนะ ถ้าเสมอใช้แต้มต่างตัดสิน</div>
     </div></div>`:""}
 
     <div class="statgrid" style="margin:0 0 12px;">
@@ -2413,10 +2499,10 @@ function renderSummaryHtml(s){
     </div>
 
     <div class="card" style="margin-bottom:12px;">
-      <h3>📊 สถิติรายคน</h3>
+      <h3>📊 สถิติรายคน <span class="muted" style="font-weight:400; font-size:11px;">(เรียงจากชนะมากสุด • ± = แต้มได้−แต้มเสีย)</span></h3>
       <table class="tbl">
-        <tr><th>ผู้เล่น</th><th style="text-align:center;">เซ็ต</th><th style="text-align:center;">ชนะ</th><th style="text-align:center;">แพ้</th><th style="text-align:center;">Win%</th></tr>
-        ${statRows || '<tr><td colspan="5" class="muted">ไม่มีข้อมูล</td></tr>'}
+        <tr><th>ผู้เล่น</th><th style="text-align:center;">เซ็ต</th><th style="text-align:center;">ชนะ</th><th style="text-align:center;">แพ้</th><th style="text-align:center;">±</th><th style="text-align:center;">Win%</th></tr>
+        ${statRows || '<tr><td colspan="6" class="muted">ไม่มีข้อมูล</td></tr>'}
       </table>
     </div>
 
@@ -3235,6 +3321,135 @@ function pairStats(){
   }));
   return Object.values(p).map(x=>({...x, sets:x.w+x.l, wr:(x.w+x.l)>0? x.w/(x.w+x.l):0}));
 }
+/* =====================================================
+   PRO MODE: ค่ามือ (Elo) + ระดับมือ S/N/P
+   - คำนวณจากประวัติเซ็ตทั้งหมด (นัดจบแล้ว + นัดกำลังตี) เรียงตามเวลา
+   - แต้มเริ่มต้นอ้างอิงสถิติเดิม: ใครมียอดยกมา (baseW/baseL) ≥10 เซ็ต
+     จะเริ่มสูง/ต่ำกว่า 1000 ตาม Win% เดิม (จำกัด ±120)
+   - คำนวณให้ทุกคน (เพื่อความแม่นของคู่ตี) แต่แสดงเฉพาะสมาชิก Pro
+   ===================================================== */
+const ELO_START = 1000, ELO_K = 32;
+const LV_N = 1075, LV_P = 1175, LV_MIN_SETS = 8;   // เกณฑ์ระดับมือ: S < 1075 ≤ N < 1175 ≤ P
+function eloSeed(m){
+  const t = (m.baseW||0)+(m.baseL||0);
+  if(t>=10){ const d = ((m.baseW||0)/t - 0.5)*400; return ELO_START + Math.max(-120, Math.min(120, d)); }
+  return ELO_START;
+}
+function eloAll(){
+  const R = {}, hist = {};
+  db.members.forEach(m=>{ R[m.id]=eloSeed(m); hist[m.id]=[]; });
+  const ses = [...db.sessions].filter(s=>s.status==="done"||s.status==="playing")
+    .sort((a,b)=> String(a.date).localeCompare(String(b.date)));   // sort เสถียร: วันเดียวกันคงลำดับเดิม
+  ses.forEach(s=> (s.sets||[]).forEach(x=>{
+    const w = setWinner(x); if(!w) return;
+    const A = (x.teamA||[]).filter(id=>R[id]!=null), B = (x.teamB||[]).filter(id=>R[id]!=null);
+    if(!A.length || !B.length) return;
+    const ra = A.reduce((t,id)=>t+R[id],0)/A.length;
+    const rb = B.reduce((t,id)=>t+R[id],0)/B.length;
+    const ea = 1/(1+Math.pow(10,(rb-ra)/400));      // โอกาสชนะที่คาดของทีม A
+    const sa = w==="A"? 1 : 0;
+    const dA = ELO_K*(sa-ea), dB = ELO_K*((1-sa)-(1-ea));
+    A.forEach(id=>{ R[id]+=dA; hist[id].push({won:sa===1, d:dA}); });
+    B.forEach(id=>{ R[id]+=dB; hist[id].push({won:sa===0, d:dB}); });
+  }));
+  const out = {};
+  Object.keys(R).forEach(id=> out[id] = { r:Math.round(R[id]), sets:hist[id].length, last:hist[id].slice(-10) });
+  return out;
+}
+function handLevel(e){
+  if(!e || e.sets<LV_MIN_SETS) return { lv:"รอประเมิน", color:"var(--ink-soft)", next:null, need:e? LV_MIN_SETS-e.sets : LV_MIN_SETS };
+  if(e.r>=LV_P) return { lv:"P", color:"var(--lime)", next:null };
+  if(e.r>=LV_N) return { lv:"N", color:"var(--blue)", next:LV_P-e.r };
+  return { lv:"S", color:"var(--amber)", next:LV_N-e.r };
+}
+/* ---------- วงจร Turn Pro: ขอ → Admin อนุมัติ → เข้าโหมด Pro / ออกเอง / Admin เอาออก ---------- */
+function proPending(){ return db.members.filter(m=>m.proReq && !m.pro); }
+function openTurnPro(){
+  const m = me(); if(!m || m.pro) return;
+  if(m.proReq){
+    modal(`
+      <div class="modal-head"><h3>⚡ Turn Pro</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+      <p class="muted" style="margin-top:0;">⏳ ส่งคำขอแล้วเมื่อ ${new Date(m.proReq.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} — รอ Admin อนุมัติ</p>
+      <button class="btn btn-danger btn-block" onclick="cancelProReq()">ยกเลิกคำขอ</button>
+      <div style="height:8px;"></div>
+      <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    return;
+  }
+  modal(`
+    <div class="modal-head"><h3>⚡ Turn Pro — โหมดพัฒนาฝีมือ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p style="margin-top:0;">โหมด Pro เพิ่มหน้า <b>⚡ Pro</b> สำหรับคนที่อยากพัฒนาฝีมือจริงจัง:</p>
+    <p class="muted" style="font-size:13px; line-height:1.7;">
+    🎯 <b>ค่ามือ</b> — แต้มฝีมือที่ขึ้นลงตามผลตีจริง <b>ชนะทีมมือดีได้แต้มเยอะ ชนะทีมมือรองได้แต้มน้อย</b> (การเลือกคู่ตีจึงมีผลต่อคะแนนของคุณ)<br>
+    🏅 <b>ระดับมือ S / N / P</b> — เลื่อนขั้นอัตโนมัติตามค่ามือ เริ่มต้นจากสถิติเดิมของคุณ<br>
+    🎲 <b>จัดทีมสูสี</b> — เลือก 4 คน ระบบเสนอการจับคู่ที่สูสีที่สุด<br>
+    ⏳ <b>คิวแฟร์</b> — เห็นว่าใครตีน้อยสุด ควรได้ลงคิวก่อน</p>
+    <p class="muted" style="font-size:12px;">คำขอจะถูกส่งให้ Admin ตรวจอนุมัติก่อน • ออกจากโหมด Pro เองได้ทุกเมื่อ สถิติแพ้ชนะปกติไม่เปลี่ยนแปลง</p>
+    <button class="btn btn-lime btn-block" onclick="requestPro()">📨 ส่งคำขอ Turn Pro ให้ Admin</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ยังก่อน</button>`);
+}
+async function requestPro(){
+  const m = me(); if(!m || m.pro || m.proReq) return;
+  m.proReq = { at:Date.now() };
+  await storeSave(); closeModal(); renderAll();
+  toast("📨 ส่งคำขอ Turn Pro แล้ว — รอ Admin อนุมัติ");
+}
+async function cancelProReq(){
+  const m = me(); if(!m || !m.proReq) return;
+  delete m.proReq;
+  await storeSave(); closeModal(); renderAll();
+  toast("ยกเลิกคำขอแล้ว");
+}
+function openProAdmin(){
+  if(!isAdmin()) return;
+  const pend = proPending();
+  const pros = db.members.filter(m=>m.pro);
+  modal(`
+    <div class="modal-head"><h3>⚡ จัดการโหมด Pro</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <h3 style="font-size:14px;">⏳ คำขอรออนุมัติ (${pend.length})</h3>
+    ${pend.length? pend.map(m=>`<div class="court-line">
+        <span style="flex:1;">${m.emoji} ${esc(m.name)}<br><span class="muted" style="font-size:11px;">ขอเมื่อ ${new Date(m.proReq.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span></span>
+        <button class="btn btn-lime btn-sm" onclick="approvePro('${m.id}')">✅ อนุมัติ</button>
+        <button class="btn btn-danger btn-sm" onclick="rejectPro('${m.id}')">✕</button>
+      </div>`).join("") : '<div class="muted" style="margin-bottom:10px;">ไม่มีคำขอค้าง</div>'}
+    <div class="divider"></div>
+    <h3 style="font-size:14px;">⚡ สมาชิก Pro ปัจจุบัน (${pros.length})</h3>
+    ${pros.length? pros.map(m=>`<div class="court-line">
+        <span style="flex:1;">${m.emoji} ${esc(m.name)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="removePro('${m.id}')">− เอาออกจาก Pro</button>
+      </div>`).join("") : '<div class="muted">ยังไม่มีสมาชิก Pro</div>'}
+    <div style="height:12px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+async function approvePro(mid){
+  if(!isAdmin()) return;
+  const m = mem(mid); if(!m) return;
+  m.pro = true; delete m.proReq;
+  await storeSave(); openProAdmin(); renderAll();
+  toast("✅ "+m.name+" เข้าสู่โหมด Pro แล้ว ⚡");
+}
+async function rejectPro(mid){
+  if(!isAdmin()) return;
+  const m = mem(mid); if(!m || !m.proReq) return;
+  if(!confirm("ปฏิเสธคำขอ Turn Pro ของ "+m.name+"?")) return;
+  delete m.proReq;
+  await storeSave(); openProAdmin(); renderAll();
+}
+async function removePro(mid){
+  if(!isAdmin()) return;
+  const m = mem(mid); if(!m || !m.pro) return;
+  if(!confirm("เอา "+m.name+" ออกจากโหมด Pro?\n(สถิติแพ้ชนะปกติไม่หายไป และขอกลับเข้ามาใหม่ได้)")) return;
+  delete m.pro;
+  await storeSave(); openProAdmin(); renderAll();
+  toast(m.name+" ออกจากโหมด Pro แล้ว");
+}
+async function quitPro(){
+  const m = me(); if(!m || !m.pro) return;
+  if(!confirm("ออกจากโหมด Pro?\nสถิติแพ้ชนะปกติไม่เปลี่ยนแปลง และขอกลับเข้ามาใหม่ได้ทุกเมื่อ")) return;
+  delete m.pro;
+  await storeSave(); go("play");
+  toast("ออกจากโหมด Pro แล้ว — ใช้งานแบบปกติเหมือนเดิม");
+}
 function careerStats(){
   return db.members.map(m=>{
     let w = m.baseW||0, l = m.baseL||0, played = 0;
@@ -3246,6 +3461,34 @@ function careerStats(){
     const sets = w+l;
     return { id:m.id, name:m.name, emoji:m.emoji, w, l, sets, played, wr: sets>0? w/sets : null };
   });
+}
+/* ---------- ขาประจำรายเดือน: ใครมาตีบ่อยสุด (ไม่นับ Admin) — ไว้พิจารณารางวัล เช่น ตีฟรี ---------- */
+function regularMonths(){
+  const set = {};
+  db.sessions.filter(s=> s.status==="done"||s.status==="playing").forEach(s=>{
+    const m = String(s.date||"").slice(0,7); if(m.length===7) set[m]=true;
+  });
+  return Object.keys(set).sort().reverse();   // เดือนล่าสุดก่อน
+}
+function regularStats(month){
+  const ses = db.sessions.filter(s=> (s.status==="done"||s.status==="playing") && String(s.date||"").slice(0,7)===month);
+  const cnt = {};
+  ses.forEach(s=> (s.attendees||[]).forEach(a=>{ cnt[a.memberId]=(cnt[a.memberId]||0)+1; }));
+  const rows = Object.keys(cnt)
+    .map(id=>({ m:mem(id), n:cnt[id] }))
+    .filter(x=> x.m && x.m.role!=="admin")          // ยกเว้น Admin ตามกติการางวัล
+    .sort((a,b)=> b.n-a.n || a.m.name.localeCompare(b.m.name, "th"));
+  return { rows, total: ses.length };
+}
+function regMonthNav(dir){
+  const ms = regularMonths(); if(!ms.length) return;
+  let i = ms.indexOf(window.__regMonth||ms[0]); if(i<0) i=0;
+  i = Math.min(ms.length-1, Math.max(0, i+dir));
+  window.__regMonth = ms[i];
+  renderRank(); translateDom($("v-rank"));
+}
+function fmtMonthTH(m){
+  try{ return new Date(m+"-15").toLocaleDateString(loc(), {month:"long", year:"numeric"}); }catch(e){ return m; }
 }
 function renderRank(){
   const v = $("v-rank");
@@ -3274,8 +3517,33 @@ function renderRank(){
       <td style="text-align:center; color:var(--coral);">${x.l}</td>
       <td style="text-align:center; font-weight:700;">${Math.round(x.wr*100)}%</td>
     </tr>`).join("");
+  // 🎖️ ขาประจำประจำเดือน (ไม่นับ Admin)
+  const regMs = regularMonths();
+  let regCard = "";
+  if(regMs.length){
+    if(!window.__regMonth || !regMs.includes(window.__regMonth)) window.__regMonth = regMs[0];
+    const mi = regMs.indexOf(window.__regMonth);
+    const reg = regularStats(window.__regMonth);
+    const maxN = reg.rows.length? reg.rows[0].n : 0;
+    regCard = `<div class="card">
+      <h3>🎖️ ขาประจำ — ใครมาบ่อยสุด <span class="muted" style="font-weight:400; font-size:11px;">(ไม่นับ Admin • ไว้พิจารณารางวัล เช่น ตีฟรี)</span></h3>
+      <div class="row" style="margin-bottom:8px;">
+        <button class="btn btn-ghost btn-sm" ${mi>=regMs.length-1?"disabled style='opacity:.4;'":""} onclick="regMonthNav(1)">◀️</button>
+        <b style="font-family:'Prompt',sans-serif;">${fmtMonthTH(window.__regMonth)} <span class="muted" style="font-weight:400; font-size:11px;">(${reg.total} นัด)</span></b>
+        <button class="btn btn-ghost btn-sm" ${mi<=0?"disabled style='opacity:.4;'":""} onclick="regMonthNav(-1)">▶️</button>
+      </div>
+      ${reg.rows.length? reg.rows.slice(0,10).map((x,i)=>`
+        <div class="court-line" ${x.n===maxN?'style="border-color:rgba(198,242,78,.55); background:rgba(198,242,78,.07);"':""}>
+          <span style="width:26px; text-align:center;">${x.n===maxN?"👑":(i+1)+"."}</span>
+          <span style="flex:1;">${x.m.emoji} ${esc(x.m.name)}${x.n===maxN?' <span class="tag tag-open" style="font-size:9.5px; padding:1px 6px;">ขาประจำ</span>':""}</span>
+          <b style="color:${x.n===maxN?"var(--lime)":"var(--ink)"};">${x.n} นัด</b>
+        </div>`).join("")
+      : '<div class="muted">เดือนนี้ยังไม่มีคนมาตี</div>'}
+    </div>`;
+  }
   v.innerHTML = `
     ${backBar()}
+    ${!(me()&&me().pro)? `<button class="btn ${me()&&me().proReq? "btn-ghost":"btn-blue"} btn-block" style="margin-bottom:10px;" onclick="openTurnPro()">${me()&&me().proReq? "⏳ Turn Pro — รอ Admin อนุมัติ (แตะเพื่อดู/ยกเลิก)":"⚡ Turn Pro — ปลดล็อกค่ามือ ระดับมือ S/N/P และเครื่องมือจัดทีม"}</button>`:""}
     <div class="card">
       <h3>🏆 สถิติ & อันดับก๊วน <span class="muted" style="font-weight:400;">(แตะชื่อดูประวัติรายคน)</span></h3>
       ${rows || '<div class="empty"><div class="big">🏆</div>ยังไม่มีสถิติ — จบนัดแรกแล้วสถิติจะขึ้นที่นี่</div>'}
@@ -3289,6 +3557,7 @@ function renderRank(){
       </table>
       <p class="muted" style="margin:8px 0 0; font-size:11px;">ดู Best Partner ของตัวเอง: แตะชื่อในอันดับด้านบน → ตาราง "สถิติกับคู่หู"</p>
     </div>`:""}
+    ${regCard}
     ${never.length? `<div class="card"><h3>🌱 ยังไม่มีสถิติ</h3><div class="chips">${never.map(x=>`<span class="chip" style="cursor:default;"><span class="av">${x.emoji}</span>${esc(x.name)}</span>`).join("")}</div></div>`:""}`;
 }
 
@@ -3347,6 +3616,144 @@ function openPlayerStats(id){
 }
 
 /* =====================================================
+   VIEW: ⚡ Pro (เฉพาะสมาชิกโหมด Pro)
+   ===================================================== */
+function renderPro(){
+  const v = $("v-pro"); if(!v) return;
+  const m = me();
+  if(!m || !m.pro){ v.innerHTML = ""; return; }
+  const E = eloAll();
+  const my = E[meId] || {r:ELO_START, sets:0, last:[]};
+  const lv = handLevel(my);
+  const last = my.last;
+  const w10 = last.filter(x=>x.won).length;
+  const trend = last.slice(-5).reduce((t,x)=>t+x.d,0);
+  const trendIcon = last.length<3? "" : trend>4? "📈 กำลังมาแรง" : trend<-4? "📉 ฟอร์มตก" : "➡️ ทรงตัว";
+  // แต้มต่างรวม (ได้−เสีย) ของเซ็ตล่าสุดไม่เกิน 10 เซ็ต — นำแต้มมาคิดคู่กับผลแพ้ชนะ
+  let myDiff = 0, myDiffN = 0;
+  [...db.sessions].filter(s=>s.status==="done"||s.status==="playing")
+    .sort((a,b)=> String(b.date).localeCompare(String(a.date)))
+    .forEach(s=> [...(s.sets||[])].reverse().forEach(x=>{
+      if(myDiffN>=10) return;
+      const inA = (x.teamA||[]).includes(meId), inB = (x.teamB||[]).includes(meId);
+      if(!inA && !inB) return;
+      const mS = inA? Number(x.scoreA)||0 : Number(x.scoreB)||0;
+      const oS = inA? Number(x.scoreB)||0 : Number(x.scoreA)||0;
+      myDiff += mS-oS; myDiffN++;
+    }));
+
+  // อันดับสมาชิก Pro (แสดงเฉพาะคน Pro — คนอื่นคำนวณเบื้องหลังเพื่อความแม่น แต่ไม่แสดง)
+  const pros = db.members.filter(x=>x.pro).map(x=>({m:x, e:E[x.id]||{r:ELO_START,sets:0}}))
+    .sort((a,b)=> b.e.r-a.e.r);
+  const proRows = pros.map((p,i)=>{
+    const plv = handLevel(p.e);
+    return `<tr ${p.m.id===meId?'style="background:rgba(198,242,78,.07);"':""}>
+      <td style="width:26px; text-align:center;">${i<3? ["🥇","🥈","🥉"][i] : i+1}</td>
+      <td class="notx">${p.m.emoji} ${esc(p.m.name)}${p.m.id===meId?' <span class="muted">(คุณ)</span>':""}</td>
+      <td style="text-align:center;"><b style="color:${plv.color};">${plv.lv}</b></td>
+      <td style="text-align:center; font-weight:700; font-family:'Prompt',sans-serif;">${p.e.r}</td>
+      <td style="text-align:center;" class="muted">${p.e.sets}</td>
+    </tr>`;
+  }).join("");
+
+  // จัดทีมสูสี: เลือกจากผู้ลงชื่อนัดที่กำลังตี/เปิดอยู่ ถ้าไม่มีใช้สมาชิก Pro+คนที่มีเซ็ต
+  const act = activeSession();
+  const pool = act? act.attendees.map(a=>mem(a.memberId)).filter(Boolean)
+                  : db.members.filter(x=> x.pro || (E[x.id]&&E[x.id].sets>0));
+  window.__proPick = (window.__proPick||[]).filter(id=> pool.some(p=>p.id===id));
+  const pick = window.__proPick;
+  const chips = pool.map(p=>`<span class="chip ${pick.includes(p.id)?"on":""}" onclick="proPickToggle('${p.id}')"><span class="av">${p.emoji}</span>${esc(p.name)}</span>`).join("");
+
+  // คิวแฟร์: นัดกำลังตี — ใครตีน้อยสุดควรได้ลงก่อน
+  let queueCard = "";
+  if(act && act.status==="playing"){
+    const st = sessionStats(act);
+    const q = act.attendees.map(a=>({m:mem(a.memberId), n:(st[a.memberId]||{sets:0}).sets}))
+      .filter(x=>x.m).sort((a,b)=> a.n-b.n);
+    queueCard = `<div class="card">
+      <h3>⏳ คิวแฟร์ — นัดวันนี้ <span class="muted" style="font-weight:400; font-size:11px;">(ตีน้อยสุดควรได้ลงคิวก่อน)</span></h3>
+      ${q.map((x,i)=>`<div class="court-line"><span style="width:20px; text-align:center;">${i+1}.</span><span style="flex:1;">${x.m.emoji} ${esc(x.m.name)}</span><b>${x.n} เซ็ต</b>${i===0? ' <span class="tag tag-open" style="font-size:10px;">ลงก่อนเลย!</span>':""}</div>`).join("")}
+    </div>`;
+  }
+
+  v.innerHTML = `
+    ${backBar()}
+    <div class="sess-hero">
+      <div class="row"><span class="tag tag-mgr">⚡ โหมด Pro</span><button class="btn btn-ghost btn-sm" onclick="quitPro()">ออกจากโหมด Pro</button></div>
+      <div class="sess-date">${m.emoji} ${esc(m.name)}</div>
+      <div class="statgrid" style="margin-top:10px;">
+        <div class="statbox"><div class="v" style="color:${lv.color}; font-size:26px;">${lv.lv}</div><div class="l">ระดับมือ</div></div>
+        <div class="statbox"><div class="v" style="color:var(--lime);">${my.r}</div><div class="l">ค่ามือ</div></div>
+        <div class="statbox"><div class="v">${last.length? w10+"-"+(last.length-w10):"-"}</div><div class="l">ฟอร์ม ${last.length} เซ็ตล่าสุด</div></div>
+      </div>
+      <div class="muted" style="margin-top:10px; font-size:12.5px;">
+        ${lv.lv==="รอประเมิน"? `ตีอีก <b style="color:var(--lime);">${lv.need}</b> เซ็ตจะเริ่มจัดระดับมือ (ต้องมีอย่างน้อย ${LV_MIN_SETS} เซ็ต)`
+          : lv.next? `อีก <b style="color:var(--lime);">${lv.next}</b> แต้ม เลื่อนขั้นเป็นมือ ${lv.lv==="S"?"N":"P"}` : `🏅 ถึงระดับสูงสุดแล้ว — รักษาไว้ให้ได้!`}
+        ${trendIcon? " • "+trendIcon:""}
+        ${myDiffN? ` • แต้มต่าง ${myDiffN} เซ็ตล่าสุด <b style="color:${myDiff>0?"var(--lime)":myDiff<0?"var(--coral)":"var(--ink-soft)"};">${myDiff>0?"+":""}${myDiff}</b>`:""}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🏅 อันดับค่ามือ (เฉพาะสมาชิก Pro)</h3>
+      <table class="tbl">
+        <tr><th></th><th>สมาชิก</th><th style="text-align:center;">ระดับ</th><th style="text-align:center;">ค่ามือ</th><th style="text-align:center;">เซ็ต</th></tr>
+        ${proRows}
+      </table>
+      <p class="muted" style="margin:8px 0 0; font-size:11px;">ชนะทีมค่ามือสูงกว่า = ได้แต้มเยอะ • ชนะทีมค่ามือต่ำกว่า = ได้แต้มน้อย — การเลือกคู่ตีจึงมีผลต่อคะแนน</p>
+    </div>
+
+    <div class="card">
+      <h3>🎲 จัดทีมให้สูสี <span class="muted" style="font-weight:400; font-size:11px;">(เลือก 4 คน)</span></h3>
+      <div class="chips">${chips || '<span class="muted">ยังไม่มีผู้เล่นให้เลือก</span>'}</div>
+      <div id="proSuggest" style="margin-top:10px;"></div>
+      <button class="btn btn-lime btn-block" style="margin-top:10px;" onclick="suggestTeams()">🎲 จัดทีมจาก ${pick.length} คนที่เลือก</button>
+    </div>
+
+    ${queueCard}
+
+    <div class="card">
+      <h3>📐 กติกาโหมด Pro</h3>
+      <p class="muted" style="font-size:12.5px; line-height:1.75; margin:0;">
+      • ทุกคนเริ่มที่ ${ELO_START} แต้ม (ใครมีสถิติยกมาจากไฟล์เดิม จะเริ่มสูง/ต่ำกว่านี้ตาม Win% เดิม)<br>
+      • ชนะ = แต้มขึ้น แพ้ = แต้มลง — <b>มาก/น้อยขึ้นกับค่ามือของคู่ต่อสู้</b> เหมือนต่อยมวย: ชนะแชมป์ได้เข็มขัด ชนะมือใหม่ได้แค่คำชม<br>
+      • เซ็ตคู่ใช้ค่าเฉลี่ยของทีม แล้วแบ่งแต้มให้ทั้งคู่เท่ากัน<br>
+      • ระดับมือ: <b style="color:var(--amber);">S</b> &lt; ${LV_N} ≤ <b style="color:var(--blue);">N</b> &lt; ${LV_P} ≤ <b style="color:var(--lime);">P</b> — เลื่อนขั้น/ลดขั้นอัตโนมัติตามค่ามือ (ต้องตีครบ ${LV_MIN_SETS} เซ็ตก่อนจึงจัดระดับ)<br>
+      • ค่ามือคำนวณจากเซ็ตที่บันทึกในแอปเท่านั้น และแสดงเฉพาะสมาชิก Pro ด้วยกัน</p>
+    </div>`;
+}
+function proPickToggle(id){
+  window.__proPick = window.__proPick||[];
+  const i = window.__proPick.indexOf(id);
+  if(i>=0) window.__proPick.splice(i,1);
+  else {
+    if(window.__proPick.length>=4) return toast("เลือกได้ 4 คน — เอาคนเดิมออกก่อน", true);
+    window.__proPick.push(id);
+  }
+  renderPro(); translateDom($("v-pro"));
+}
+function suggestTeams(){
+  const pick = window.__proPick||[];
+  if(pick.length!==4) return toast("เลือกให้ครบ 4 คนก่อนนะ (ตอนนี้ "+pick.length+")", true);
+  const E = eloAll();
+  const r = id => (E[id]||{r:ELO_START}).r;
+  const [a,b,c,d] = pick;
+  const opts = [ [[a,b],[c,d]], [[a,c],[b,d]], [[a,d],[b,c]] ];
+  let best=null, bestGap=1e9;
+  opts.forEach(([t1,t2])=>{
+    const g = Math.abs((r(t1[0])+r(t1[1]))/2 - (r(t2[0])+r(t2[1]))/2);
+    if(g<bestGap){ bestGap=g; best=[t1,t2]; }
+  });
+  const ra=(r(best[0][0])+r(best[0][1]))/2, rb=(r(best[1][0])+r(best[1][1]))/2;
+  const pa = Math.round(100/(1+Math.pow(10,(rb-ra)/400)));
+  const el = $("proSuggest");
+  if(el) el.innerHTML = `<div class="court-reco" style="display:block;">
+    <div style="text-align:center; font-weight:800; font-family:'Prompt',sans-serif;">${teamLabel(best[0])}<br><span style="color:var(--lime);">VS</span><br>${teamLabel(best[1])}</div>
+    <div class="muted" style="text-align:center; margin-top:6px; font-size:12px;">โอกาสชนะ ${pa}% : ${100-pa}% — ${bestGap<15?"สูสีมาก! 🔥": bestGap<40?"สูสีกำลังดี":"ต่างกันพอสมควร แต่นี่คือแบบที่สูสีที่สุดแล้ว"}</div>
+  </div>`;
+  translateDom($("v-pro"));
+}
+/* =====================================================
    VIEW: ประวัติ
    ===================================================== */
 function renderHistory(){
@@ -3385,6 +3792,21 @@ async function delDoneSession(sid){
 /* =====================================================
    AUTO REFRESH (ดึงข้อมูลที่เพื่อนแก้มาอัปเดต)
    ===================================================== */
+/* ---------- polling ปรับตามบริบท ----------
+   • นัดสถานะ "กำลังตี" → ทุก 5 วิ (ช่วงที่หลายคนบันทึกเซ็ตพร้อมกัน ต้องสด)
+   • ปกติ → ทุก 15 วิ
+   • แอปถูกพับ/สลับแท็บ → หยุดดึงข้อมูล (ประหยัดแบตและโควตา) แล้วดึงทันทีเมื่อเปิดกลับมา */
+let __pollTimer = null;
+function schedulePoll(){
+  clearTimeout(__pollTimer);
+  if(document.hidden) return;
+  const playing = db && db.sessions && db.sessions.some(x=>x.status==="playing");
+  __pollTimer = setTimeout(async ()=>{ await pollRemote(); schedulePoll(); }, playing? 5000 : 15000);
+}
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden){ clearTimeout(__pollTimer); }
+  else { pollRemote(); schedulePoll(); }
+});
 async function pollRemote(){
   if(modalOpen()) return;
   if(gasUrl() && !clubKey()) return;   // ยังไม่ผ่านรหัสก๊วน — ไม่ดึงข้อมูล
@@ -3516,7 +3938,7 @@ async function init(){
     lsDel(LOGIN_KEY);
   }
   if(meId) renderAll(); else renderLogin();
-  setInterval(pollRemote, 15000);
+  schedulePoll();
 }
 init();
 /* PWA: service worker แบบเบาที่สุด เพื่อให้ติดตั้งเป็นแอปได้ (ไม่แคช — ได้เวอร์ชันใหม่เสมอ) */
