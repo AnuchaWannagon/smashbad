@@ -40,7 +40,7 @@ button{ font-family:'Noto Sans Thai',sans-serif; cursor:pointer; }
 input,select{ font-family:'Noto Sans Thai',sans-serif; }
 
 /* ---------- shared ---------- */
-.wrap{ max-width:720px; margin:0 auto; padding:0 16px 90px; }
+.wrap{ max-width:720px; margin:0 auto; padding:0 16px calc(90px + env(safe-area-inset-bottom, 0px)); }
 .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
 .card h3{ margin:0 0 12px; font-size:18px; font-weight:800; color:var(--lime); letter-spacing:.01em; display:flex; align-items:center; gap:8px; border-left:4px solid var(--lime); padding-left:10px; }
 .muted{ color:var(--ink-soft); font-size:13.5px; }
@@ -102,6 +102,13 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 .setlbl.ta{ color:var(--blue) !important; }
 .setlbl.tb{ color:var(--coral) !important; }
 .setlbl.sh{ color:var(--amber) !important; font-size:14.5px !important; }
+/* ช่องกรอกคะแนน — ตัวใหญ่ กรอบสีทีม เห็นชัดจากระยะไกล */
+input.score-in{ font-size:34px; font-weight:800; text-align:center; padding:12px 8px; border-radius:14px; border-width:2.5px; background:var(--card2); font-family:'Prompt',sans-serif; }
+input.score-in.ta{ border-color:var(--blue); color:var(--blue); }
+input.score-in.tb{ border-color:var(--coral); color:var(--coral); }
+input.score-in.ta:focus{ border-color:var(--blue); box-shadow:0 0 0 3px rgba(91,140,255,.28); }
+input.score-in.tb:focus{ border-color:var(--coral); box-shadow:0 0 0 3px rgba(255,107,94,.28); }
+input.score-in::placeholder{ color:var(--ink-soft); opacity:.35; }
 /* ตัวบอกว่าแอปกำลังทำงาน (ซิงก์เบื้องหลัง) */
 .spin{ display:inline-block; animation:spinCw 1.4s linear infinite; }
 @keyframes spinCw{ to{ transform:rotate(360deg); } }
@@ -122,7 +129,7 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 .empty{ text-align:center; padding:26px 10px; color:var(--ink-soft); font-size:13.5px; }
 .empty .big{ font-size:32px; margin-bottom:6px; }
 .divider{ height:1px; background:var(--line); margin:14px 0; }
-#toast{ position:fixed; left:50%; bottom:86px; transform:translateX(-50%) translateY(16px); background:var(--lime); color:#15230A; padding:11px 18px; border-radius:999px; font-size:13.5px; font-weight:700; opacity:0; pointer-events:none; transition:all .25s; z-index:999; max-width:90vw; text-align:center; }
+#toast{ position:fixed; left:50%; bottom:calc(86px + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%) translateY(16px); background:var(--lime); color:#15230A; padding:11px 18px; border-radius:999px; font-size:13.5px; font-weight:700; opacity:0; pointer-events:none; transition:all .25s; z-index:999; max-width:90vw; text-align:center; }
 #toast.show{ opacity:1; transform:translateX(-50%); }
 #toast.err{ background:var(--coral); color:#fff; }
 
@@ -154,7 +161,7 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 
 /* ---------- app shell ---------- */
 #appView{ display:none; }
-.topbar{ position:sticky; top:0; z-index:50; background:rgba(11,16,32,.85); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+.topbar{ position:sticky; top:0; z-index:50; background:rgba(11,16,32,.85); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top, 0px); }
 .topbar-in{ max-width:720px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .brand{ display:flex; align-items:center; gap:10px; }
 .brand .b-ic{ width:42px; height:42px; border-radius:12px; background:linear-gradient(140deg,var(--lime),var(--lime-dark)); display:flex; align-items:center; justify-content:center; font-size:22px; }
@@ -166,7 +173,7 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 .exitbtn{ display:flex; align-items:center; gap:5px; padding:8px 13px; border-radius:999px; background:rgba(255,107,94,.14); border:1px solid rgba(255,107,94,.4); font-size:15px; flex-shrink:0; color:var(--coral); font-weight:800; }
 .exitbtn span{ font-size:12.5px; font-family:'Prompt',sans-serif; }
 .exitbtn:active{ transform:scale(.95); }
-.bottomnav{ position:fixed; bottom:0; left:0; right:0; z-index:50; background:rgba(15,23,48,.92); backdrop-filter:blur(10px); border-top:1px solid var(--line); }
+.bottomnav{ position:fixed; bottom:0; left:0; right:0; z-index:50; background:rgba(15,23,48,.92); backdrop-filter:blur(10px); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom, 0px); }
 .bottomnav-in{ max-width:720px; margin:0 auto; display:flex; }
 .bn-item{ flex:1; background:none; border:none; padding:9px 4px 10px; text-align:center; color:var(--ink-soft); font-size:12px; font-weight:700; }
 .bn-item .ic{ font-size:25px; display:block; margin-bottom:2px; filter:grayscale(1) opacity(.65); }
@@ -256,7 +263,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
 /* modal */
 .modal-bg{ position:fixed; inset:0; background:rgba(4,7,16,.72); display:none; align-items:flex-end; justify-content:center; z-index:100; }
 .modal-bg.show{ display:flex; }
-.modal{ background:var(--card); border:1px solid var(--line); border-radius:20px 20px 0 0; width:100%; max-width:720px; max-height:90vh; overflow-y:auto; padding:20px 18px 26px; animation:up .22s ease; }
+.modal{ background:var(--card); border:1px solid var(--line); border-radius:20px 20px 0 0; width:100%; max-width:720px; max-height:90vh; overflow-y:auto; padding:20px 18px calc(26px + env(safe-area-inset-bottom, 0px)); animation:up .22s ease; }
 @keyframes up{ from{ transform:translateY(26px); opacity:0;} to{ transform:none; opacity:1;} }
 @media(min-width:560px){ .modal-bg{ align-items:center; padding:20px; } .modal{ border-radius:20px; } }
 .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
@@ -270,7 +277,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
 .sess-item:last-child{ border-bottom:none; }
 /* ---------- จอมือถือแคบ: บีบให้พอดีจอ ไม่ล้นแนวนอน ---------- */
 @media(max-width:440px){
-  .wrap{ padding:0 10px 90px; }
+  .wrap{ padding:0 10px calc(90px + env(safe-area-inset-bottom, 0px)); }
   .card{ padding:13px; }
   .card h3{ font-size:17px; }
   .topbar-in{ padding:10px 10px; gap:6px; }
@@ -366,7 +373,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.19c";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.08.19e";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -1072,7 +1079,22 @@ const I18N = {
 "• ✏️ แก้โดย":"• ✏️ edited by",
 "✏️ แก้ไขเซ็ต":"✏️ Edit set",
 "✏️ แก้ไขการลงชื่อ":"✏️ Edit sign-ups",
+"✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก / จำนวนลูกที่ใช้":"✏️ Edit court costs / shuttle price / shuttles used",
 "✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก":"✏️ Edit court / shuttle costs",
+"🙋 ลงชื่อร่วมตีแทนเพื่อน / เพิ่ม-ถอนคนตี":"🙋 Sign up a friend / add-remove players",
+"💰 ประเมินค่าตี — ปรับค่าคอร์ท/ลูก & เก็บเงินก่อนปิดนัด":"💰 Estimate fees — adjust courts/shuttles & collect before closing",
+"💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ":"💰 View estimated fee / pay before leaving",
+"💰 ประเมินค่าตี (นัดยังไม่จบ)":"💰 Fee estimate (session in progress)",
+"💰 การจ่ายเงิน":"💰 Payments",
+"⏱️ นัดนี้ยังตีอยู่ — ยอดด้านล่างเป็น":"⏱️ This session is still in progress — the amounts below are an ",
+"ยอดประเมิน":"estimate",
+" ถ้ามีเปลี่ยนลูก/แก้ค่าคอร์ทเพิ่ม ยอดของคนที่":". If more shuttles are used or court costs change, amounts for those who ",
+"ยังไม่ได้จ่าย":"haven't paid",
+"จะถูกคำนวณใหม่":" will be recalculated",
+"✅ คนที่ต้องกลับก่อน จ่ายได้เลย — ยอดของคนที่จ่ายแล้วจะถูก":"✅ Leaving early? Pay now — a paid member's amount is ",
+"ล็อกไว้ ณ ตอนจ่าย":"locked at the moment of payment",
+" ไม่เปลี่ยนตามหลัง":" and won't change afterwards",
+"(ผู้จัดการกำหนดยอดเองล่วงหน้าได้ที่ \"ปรับยอดจ่ายรายคน\")":"(the manager can set a fixed amount in \"Adjust individual amounts\")",
 "✏️ แก้ไขข้อมูลสมาชิก (โดย Admin)":"✏️ Edit member (by Admin)",
 "✏️ แก้ไข (เปิดนัดกลับ)":"✏️ Edit (reopen session)",
 "✏️ แก้ไข":"✏️ Edit",
@@ -1789,7 +1811,7 @@ function go(v){
 function backBar(){
   return `<button class="btn btn-ghost btn-sm" style="margin-bottom:10px;" onclick="go('play')">◀️ ย้อนกลับหน้าแรก</button>`;
 }
-/* ปุ่ม Turn Pro — แสดงเฉพาะคนที่ยังไม่เป็น Pro (ใช้ซ้ำในหน้า สมาชิก / สถิติ / ประวัติ) */
+/* ปุ่ม Turn Pro — แสดงเฉพาะคนที่ยังไม่เป็น Pro (ใช้ซ้ำในหน้า นัดตี/เริ่มตี / สมาชิก / สถิติ / ประวัติ) */
 function turnProBtn(){
   const m = me();
   if(!m || m.pro) return "";
@@ -1853,6 +1875,9 @@ function renderPlay(){
   if(isAdmin() && proPending().length){
     html += `<div class="banner-approve" onclick="openProAdmin()">⚡ <b>มีคำขอ Turn Pro รออนุมัติ ${proPending().length} รายการ</b> — แตะเพื่อตรวจและกดอนุมัติ</div>`;
   }
+
+  // ⚡ ปุ่มขอ Turn Pro — โผล่ทั้งตอน "นัดตี" (open) และ "เริ่มตี" (playing)
+  html += turnProBtn();
 
   if(!s){
     html += `<div class="sess-hero" style="text-align:center;">
@@ -2127,10 +2152,13 @@ function renderPlayingSession(s){
       <div class="statbox"><div class="v">${totalSets}</div><div class="l">เซ็ตที่ตีแล้ว</div></div>
     </div>
     <button class="btn btn-lime big-join" onclick="jumpToSetForm()">🏸 บันทึกเซ็ต — ใส่ผลตีรอบนี้</button>
-    <div class="frow" style="margin-top:8px;">
-      ${canManage(s)? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openStartPlay('${s.id}')">🏟️ เพิ่ม/แก้ไขคอร์ท</button>`:""}
-      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openEditAttendees('${s.id}')">🙋 เพิ่ม/แก้ไขคนตี</button>
-    </div>
+    <button class="btn btn-blue btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800;" onclick="openEditAttendees('${s.id}')">🙋 ลงชื่อร่วมตีแทนเพื่อน / เพิ่ม-ถอนคนตี</button>
+    ${canManage(s)? `<div class="frow" style="margin-top:8px;">
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openStartPlay('${s.id}')">🏟️ เพิ่ม/แก้ไขคอร์ท</button>
+    </div>`:""}
+    ${canManage(s)
+      ? `<button class="btn btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800; background:rgba(255,194,75,.14); color:var(--amber); border:1.5px solid rgba(255,194,75,.5); border-radius:12px;" onclick="openFeeEstimate('${s.id}')">💰 ประเมินค่าตี — ปรับค่าคอร์ท/ลูก & เก็บเงินก่อนปิดนัด</button>`
+      : (isAtt && totalCost(s)>0 ? `<button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="openFeeEstimate('${s.id}')">💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ</button>`:"")}
     ${canManage(s)? `<button class="btn btn-blue big-join" onclick="finishSession('${s.id}')">🏁 ขั้นที่ 5: สรุปผล — จบนัดนี้</button>`
       : `<div class="muted" style="margin-top:12px; text-align:center;">ผู้จัดการนัดจะเป็นคนกด "สรุปผล" เมื่อเลิกตี</div>`}
     ${stageBar(s)}
@@ -2169,8 +2197,8 @@ function renderSetForm(s){
     <div class="field"><label class="setlbl ta">ทีม A — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("A")}</div></div>
     <div class="field"><label class="setlbl tb">ทีม B — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("B")}</div></div>
     <div class="frow">
-      <div class="field"><label class="setlbl ta">คะแนนทีม A</label><input type="number" min="0" max="99" value="${setDraft.scoreA}" oninput="setDraft.scoreA=this.value"></div>
-      <div class="field"><label class="setlbl tb">คะแนนทีม B</label><input type="number" min="0" max="99" value="${setDraft.scoreB}" oninput="setDraft.scoreB=this.value"></div>
+      <div class="field"><label class="setlbl ta">คะแนนทีม A</label><input class="score-in ta" type="number" inputmode="numeric" min="0" max="99" placeholder="0" value="${setDraft.scoreA}" oninput="setDraft.scoreA=this.value"></div>
+      <div class="field"><label class="setlbl tb">คะแนนทีม B</label><input class="score-in tb" type="number" inputmode="numeric" min="0" max="99" placeholder="0" value="${setDraft.scoreB}" oninput="setDraft.scoreB=this.value"></div>
     </div>
     <div class="field" style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="shChk" style="width:auto;" ${setDraft.shuttle?"checked":""} onchange="setDraft.shuttle=this.checked">
@@ -2244,8 +2272,8 @@ function renderEditSetModal(){
     <div class="field"><label class="setlbl ta">ทีม A — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("A")}</div></div>
     <div class="field"><label class="setlbl tb">ทีม B — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("B")}</div></div>
     <div class="frow">
-      <div class="field"><label class="setlbl ta">คะแนนทีม A</label><input type="number" min="0" max="99" value="${d.scoreA}" oninput="editSetDraft.scoreA=this.value"></div>
-      <div class="field"><label class="setlbl tb">คะแนนทีม B</label><input type="number" min="0" max="99" value="${d.scoreB}" oninput="editSetDraft.scoreB=this.value"></div>
+      <div class="field"><label class="setlbl ta">คะแนนทีม A</label><input class="score-in ta" type="number" inputmode="numeric" min="0" max="99" placeholder="0" value="${d.scoreA}" oninput="editSetDraft.scoreA=this.value"></div>
+      <div class="field"><label class="setlbl tb">คะแนนทีม B</label><input class="score-in tb" type="number" inputmode="numeric" min="0" max="99" placeholder="0" value="${d.scoreB}" oninput="editSetDraft.scoreB=this.value"></div>
     </div>
     <div class="field" style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="esShChk" style="width:auto;" ${d.shuttle?"checked":""} onchange="editSetDraft.shuttle=this.checked">
@@ -2559,7 +2587,7 @@ function openStartPlay(sid){
     </div>
     <button class="btn btn-blue btn-block" onclick="saveStartPlay('${s.id}')">${s.status==="open"? "💾 บันทึก & เริ่มตี!":"💾 บันทึกข้อมูลคอร์ท"}</button>
     <div style="height:8px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ (ไม่บันทึก)</button>`);
+    <button class="btn btn-ghost btn-block" onclick="window.__backToPay=0; closeModal()">◀️ ย้อนกลับ (ไม่บันทึก)</button>`);
   renderCourtDraft();
 }
 function renderCourtDraft(){
@@ -2582,9 +2610,10 @@ async function saveStartPlay(sid){
   s.shuttlePrice = Number($("spPrice").value)||0;
   s.shuttlesUsed = Number($("spUsed").value)||0;
   const starting = s.status==="open";
+  const backToPay = !!window.__backToPay; window.__backToPay = 0;
   if(s.status!=="done") s.status = "playing";   // นัดที่จบแล้ว: แก้ตัวเลขได้โดยไม่เปลี่ยนสถานะ
   await storeSave(); closeModal(); renderAll();
-  if(s.status==="done") openPayment(sid);
+  if(s.status==="done" || backToPay) openPayment(sid);
   toast(starting? "เริ่มตีได้เลย! ช่วยกันบันทึกเซ็ตนะ 🏸":"บันทึกตัวเลขค่าใช้จ่ายแล้ว");
 }
 
@@ -2808,6 +2837,23 @@ function openPayment(sid){
   histOpen = sid;
   modal(renderPaymentHtml(s));
 }
+/* ---------- 💰 ประเมินค่าตีระหว่างนัดยังไม่จบ — แยกเรื่องเก็บเงินออกจากเรื่องบันทึกคะแนน
+   ใช้หน้าจ่ายเงินเดิม (ผู้จัดการเห็นเครื่องมือครบ: แก้คอร์ท/ลูก, ปรับยอดรายคน, กดอนุมัติ)
+   ให้คนที่ต้องกลับก่อนจ่ายได้เลย โดยยอดของคนนั้นจะถูก "ล็อก" ณ ตอนจ่าย ---------- */
+function openFeeEstimate(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s) return;
+  histOpen = sid;
+  modal(renderPaymentHtml(s));
+}
+/* ล็อกยอดของคนที่แจ้งจ่าย/ถูกกดจ่ายแล้ว ระหว่างนัดยังไม่จบ (บันทึกเป็น feeOverride)
+   → ถ้ามีเปลี่ยนลูก/แก้ค่าคอร์ทหลังจากนั้น ยอดคนนี้ไม่ขยับ ส่วนต่างเฉลี่ยให้คนที่เหลือ */
+function freezeFee(s, mid){
+  if(!s || s.status==="done") return;
+  const a = (s.attendees||[]).find(x=>x.memberId===mid);
+  if(!a || hasOverride(a)) return;
+  const v = costSplit(s)[mid];
+  if(v!=null) a.feeOverride = Math.round(v*100)/100;
+}
 function renderPaymentHtml(s){
   const split = costSplit(s);
   const total = totalCost(s);
@@ -2873,7 +2919,9 @@ function renderPaymentHtml(s){
   const paidCount = s.attendees.filter(a=> s.paid && s.paid[a.memberId]).length;
 
   return `
-    <div class="modal-head"><h3>💰 การจ่ายเงิน — นัด ${fmtDateShort(s.date)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="modal-head"><h3>${s.status==="done"? "💰 การจ่ายเงิน" : "💰 ประเมินค่าตี (นัดยังไม่จบ)"} — นัด ${fmtDateShort(s.date)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+
+    ${s.status!=="done"? `<div class="banner-warn" style="margin-bottom:12px;">⏱️ นัดนี้ยังตีอยู่ — ยอดด้านล่างเป็น<b>ยอดประเมิน</b> ถ้ามีเปลี่ยนลูก/แก้ค่าคอร์ทเพิ่ม ยอดของคนที่<b>ยังไม่ได้จ่าย</b>จะถูกคำนวณใหม่<br>✅ คนที่ต้องกลับก่อน จ่ายได้เลย — ยอดของคนที่จ่ายแล้วจะถูก<b>ล็อกไว้ ณ ตอนจ่าย</b> ไม่เปลี่ยนตามหลัง${canMg? ` (ผู้จัดการกำหนดยอดเองล่วงหน้าได้ที่ "ปรับยอดจ่ายรายคน")`:""}</div>`:""}
 
     <div class="sum-total">
       <div class="muted">ค่าใช้จ่ายรวมทั้งนัด</div>
@@ -2906,7 +2954,7 @@ function renderPaymentHtml(s){
     </div>
 
     <div style="height:12px;"></div>
-    ${canMg? `<button class="btn btn-blue btn-block" onclick="openStartPlay('${s.id}')">✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก</button><div style="height:8px;"></div>`:""}
+    ${canMg? `<button class="btn btn-blue btn-block" onclick="window.__backToPay=1; openStartPlay('${s.id}')">✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก / จำนวนลูกที่ใช้</button><div style="height:8px;"></div>`:""}
     ${canMg? `<button class="btn btn-blue btn-block" onclick="openAdjustPay('${s.id}')">✏️ ปรับยอดจ่ายรายคน / ถอนชื่อคนไม่ได้มาตี</button><div style="height:8px;"></div>`:""}
     ${canMg? `<button class="btn btn-ghost btn-block" onclick="copyPaySummary('${s.id}')">📋 คัดลอกสรุปค่าใช้จ่าย → วางในไลน์กลุ่ม</button><div style="height:8px;"></div>`:""}
     <button class="btn btn-ghost btn-block" onclick="openPayHistory()">🧾 ประวัติการจ่ายเงินทั้งหมด</button>
@@ -2919,6 +2967,10 @@ function renderPaymentHtml(s){
 
 /* ---------- ปุ่มเมนู "จ่ายเงินค่าตี" — เปิดหน้าการจ่ายเงินของนัดที่เกี่ยวข้องที่สุด ---------- */
 function openPayNow(){
+  // นัดที่กำลังตีอยู่และมีตัวเลขค่าใช้จ่ายแล้ว → เปิดหน้าประเมินค่าตี (จ่ายก่อนกลับได้)
+  const act = activeSession();
+  if(act && act.status==="playing" && totalCost(act)>0
+     && act.attendees.some(a=>a.memberId===meId) && !(act.paid && act.paid[meId])) return openFeeEstimate(act.id);
   const done = db.sessions.filter(s=>s.status==="done").sort((a,b)=> b.date.localeCompare(a.date));
   if(!done.length) return toast("ยังไม่มีนัดที่จบ");
   const owe = done.find(s=> s.attendees.some(a=>a.memberId===meId) && !(s.paid && s.paid[meId]));
@@ -3057,6 +3109,7 @@ async function togglePaid(sid, mid){
     s.paid[mid] = false;
     if(s.payInfo) delete s.payInfo[mid];
   } else {
+    freezeFee(s, mid);   // นัดยังไม่จบ: ล็อกยอดคนนี้ไว้ตอนกดจ่าย
     s.paid[mid] = true;
     if(!s.payInfo) s.payInfo = {};
     // ถ้ามีคำขอค้างอยู่ (มีสลิป/ข้อความ) ให้ใช้ข้อมูลนั้น ไม่ทับด้วย manual เปล่าๆ
@@ -3263,6 +3316,7 @@ async function submitSlip(){
     up = await uploadSlipToDrive(d.dataUrl, "slip-"+nameOf(mid)+"-"+(s.date||"")); 
     if(!up) toast("อัปโหลดขึ้น Drive ไม่สำเร็จ — เก็บรูปไว้ในระบบแทน", true);
   }
+  freezeFee(s, mid);   // นัดยังไม่จบ: ล็อกยอดคนนี้ไว้ตอนแจ้งจ่าย
   s.payReq[mid] = { method:"slip", slip: up? null : d.dataUrl, slipUrl: up? up.slipUrl : null, slipId: up? up.slipId : null,
     amountRead:d.amountRead, matched:!!d.matched, at:Date.now(), by:meId, note };
   pendAdd("payreq", { sid:s.id, mid, obj:s.payReq[mid] });
@@ -3298,6 +3352,7 @@ async function payCash(sid, mid){
   const who = mid===meId ? "แจ้งว่าได้จ่ายเงินสด " : "แจ้งว่า "+nameOf(mid)+" ได้จ่ายเงินสด ";
   if(!confirm(who+money(owed)+" ให้ผู้จัดการแล้ว?\nผู้จัดการจะกดยืนยันอีกครั้ง")) return;
   if(!s.payReq) s.payReq = {};
+  freezeFee(s, mid);   // นัดยังไม่จบ: ล็อกยอดคนนี้ไว้ตอนแจ้งจ่าย
   s.payReq[mid] = { method:"cash", at:Date.now(), by:meId };
   pendAdd("payreq", { sid:s.id, mid, obj:s.payReq[mid] });
   await storeSave(); renderAll(); openPayment(sid);
@@ -3344,6 +3399,7 @@ async function approvePay(sid, mid){
   const req = s.payReq && s.payReq[mid]; if(!req) return;
   if(!s.paid) s.paid = {};
   if(!s.payInfo) s.payInfo = {};
+  freezeFee(s, mid);   // เผื่อคำขอถูกสร้างก่อนระบบล็อกยอด
   s.paid[mid] = true;
   s.payInfo[mid] = Object.assign({ method:req.method, amountRead:req.amountRead!=null? req.amountRead:null, note:req.note||"", at:req.at, approvedBy:meId, approvedAt:Date.now() }, slipFields(req));
   delete s.payReq[mid];
