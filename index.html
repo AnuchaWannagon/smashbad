@@ -366,7 +366,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.19";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.08.19c";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -486,12 +486,18 @@ let histOpen = null;    // session id opened from history
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzkNtWD-Ty1CsvTY5Im1jnc_tR61i0S-HL_yUiD4GC_QdSLSZIVPZAGYRIwg0eRh5Kr/exec";
 
 let gasOK = false;
+/* rev ที่ "ยืนยันแล้ว" จากส่วนกลาง — ใช้เป็นฐานอ้างอิงเสมอ
+   สำคัญมาก: ห้ามให้ rev ในเครื่องวิ่งขึ้นเองเวลาบันทึกไม่สำเร็จ
+   ไม่งั้นเครื่องที่ออฟไลน์นานจะมี rev สูงกว่าของจริง แล้วไปทับข้อมูลของทั้งก๊วน */
+let serverRev = -1;
 
 /* ---------- ตัวชี้วัดการซิงก์ (ไว้วินิจฉัยว่า "ช้า/ไม่สำเร็จ" เกิดจากอะไร) ---------- */
-const SYNC = { lastMs:0, lastAt:0, fails:0, saveFails:0, bytes:0, pending:false };
+const SYNC = { lastMs:0, lastAt:0, okAt:0, fails:0, saveFails:0, bytes:0, pending:false, lastErr:"" };
 const CACHE_LS = "smash-db-cache";   // สำเนาข้อมูลล่าสุดในเครื่อง — เปิดแอปไว + กันข้อมูลหายตอนเน็ตหลุด
 const PEND_LS  = "smash-pending";    // รายการที่ "เรา" เพิ่งเพิ่ม แต่ยังไม่ยืนยันว่าขึ้นฐานกลางแล้ว
-const NET_GET_MS = 12000, NET_POST_MS = 20000;   // timeout ของการอ่าน/เขียน
+/* timeout: การเขียนต้องเผื่อเวลามาก เพราะ Apps Script ต้องเขียน Google Sheet ทั้งก้อน
+   (ตั้งสั้นเกินไปจะรายงานว่า "ไม่สำเร็จ" ทั้งที่ฝั่งเซิร์ฟเวอร์บันทึกเสร็จแล้ว) */
+const NET_GET_MS = 15000, NET_POST_MS = 45000;
 const SLIP_KEEP_DAYS = 30;           // เก็บรูปสลิปของนัดที่จบแล้ว 30 วัน แล้วตัดออกเพื่อคุมขนาดข้อมูล
 
 function gasUrl(){
@@ -511,6 +517,14 @@ async function fetchT(url, opts, ms){
   const tm = setTimeout(function(){ try{ if(ac) ac.abort(); }catch(e){} }, ms);
   try{ return await fetch(url, Object.assign({}, opts||{}, ac? {signal:ac.signal} : {})); }
   finally{ clearTimeout(tm); }
+}
+
+/* แปลงข้อผิดพลาดให้เป็นข้อความสั้นๆ ที่วินิจฉัยต่อได้ (แสดงในหน้าสถานะการเชื่อมต่อ) */
+function netErr(e, ms){
+  if(!e) return "ไม่ทราบสาเหตุ";
+  if(e.name==="AbortError") return "หมดเวลารอ (>"+Math.round(ms/1000)+" วิ) — ฝั่ง Google ตอบช้าหรือข้อมูลใหญ่เกินไป";
+  if(e instanceof SyntaxError) return "คำตอบจากเซิร์ฟเวอร์ไม่ใช่ข้อมูลที่อ่านได้ (มักเป็นหน้า error/ขอสิทธิ์ของ Apps Script)";
+  return "เชื่อมต่อไม่ได้: " + (e.message||e);
 }
 
 /* ---------- สำเนาข้อมูลในเครื่อง (แทนที่ window.storage ซึ่งมีเฉพาะใน Claude Artifact ไม่มีบน GitHub Pages) ---------- */
@@ -589,7 +603,7 @@ function slipCount(){
   let n = 0;
   (db.sessions||[]).forEach(s=>{
     Object.keys(s.payInfo||{}).forEach(k=>{ if(s.payInfo[k] && s.payInfo[k].slip) n++; });
-    Object.keys(s.payReq||{}).forEach(k=>{ if(s.payReq[k] && s.payReq[k].slip) n++; });
+    Object.keys(s.payReq||{}).forEach(k=>{ if(s.payReq[k] && s.payReq[k].slip) n++; });   // นับเฉพาะรูปที่ฝังในฐานข้อมูล
   });
   return n;
 }
@@ -602,10 +616,10 @@ function pruneSlips(days){
   (db.sessions||[]).forEach(s=>{
     if(s.status!=="done") return;
     const t = s.finishedAt || Date.parse(String(s.date)+"T23:59:59") || 0;
-    if(!t || t > cut) return;
+    if(days!==0 && (!t || t > cut)) return;
     Object.keys(s.payInfo||{}).forEach(k=>{
       const v = s.payInfo[k];
-      if(v && v.slip){ v.slip = null; v.slipCleared = true; n++; }
+      if(v && v.slip){ v.slip = null; v.slipCleared = true; n++; }   // รูปที่เก็บบน Drive (slipUrl) ไม่ถูกแตะ
     });
   });
   return n;
@@ -627,11 +641,13 @@ async function gasLoad(){
       return null;
     }
     if(out && out.ok){
-      gasOK = true;
+      gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = "";
+      serverRev = out.data? (Number(out.data.rev)||0) : 0;
       if(out.data){ return out.data; }
       return null;   // ชีตยังว่าง — จะถูกเติมเมื่อบันทึกครั้งแรก
     }
-  }catch(e){ SYNC.fails++; }
+    SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธคำขออ่าน" + (out && out.error? " ("+out.error+")" : "");
+  }catch(e){ SYNC.fails++; SYNC.lastErr = netErr(e, NET_GET_MS); }
   gasOK = false; return null;
 }
 async function gasSave(){
@@ -643,28 +659,43 @@ async function gasSave(){
       const res = await fetchT(url, {method:"POST", body}, NET_POST_MS);
       const out = await res.json();
       SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
-      if(out && out.ok){ gasOK = true; pendSync(); return true; }
+      if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; pendSync(); return true; }
       if(out && out.conflict && out.data){
         // มีคนบันทึกข้อมูลใหม่กว่าไปก่อน — รับของใหม่มาเป็นฐาน แล้วเติมรายการของเรากลับเข้าไป
         gasOK = true;
-        db = out.data;
+        db = out.data; serverRev = Number(db.rev)||0;
         const n = pendReapply();
         lastRaw = JSON.stringify(db); cacheSave();
         if(meId) renderAll();
-        if(n && i<2){ db.rev = (db.rev||0)+1; continue; }   // ส่งซ้ำพร้อมรายการของเรา
+        if(n && i<2){ db.rev = serverRev + 1; continue; }   // ส่งซ้ำพร้อมรายการของเรา
         toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว");
         return true;
       }
-    }catch(e){ SYNC.fails++; }
+      SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธการบันทึก" + (out && out.error? " ("+out.error+")" : "") + " — ตรวจโค้ด Apps Script/ขนาดข้อมูล";
+    }catch(e){ SYNC.fails++; SYNC.lastErr = netErr(e, NET_POST_MS); }
     if(i<2) await sleep(700*(i+1)*(i+1));   // หน่วงก่อนลองใหม่ 0.7 วิ → 2.8 วิ
   }
+  /* ส่งไม่สำเร็จ (มักเพราะหมดเวลารอ) — ตรวจซ้ำก่อนสรุปว่าล้มเหลว
+     เพราะบ่อยครั้ง Apps Script บันทึกเสร็จแล้ว แต่ตอบกลับช้าจนฝั่งเราตัดสายไปก่อน */
+  const reason = SYNC.lastErr;
+  try{
+    const chk = await gasLoad();
+    if(chk && (chk.rev||0) >= (db.rev||0)){
+      gasOK = true; SYNC.okAt = Date.now();
+      SYNC.lastErr = "ตอบกลับช้าเกิน แต่ข้อมูลขึ้นระบบกลางเรียบร้อยแล้ว";
+      pendSync(); return true;
+    }
+  }catch(e){}
+  SYNC.lastErr = reason || SYNC.lastErr;
   gasOK = false; SYNC.saveFails++; return false;
 }
 
 /* ---------- บันทึก: ลงเครื่องก่อนเสมอ แล้วค่อยส่งขึ้นส่วนกลาง (กันงานซ้อนกันด้วย mutex) ---------- */
 let __saving = false, __saveAgain = false;
 async function storeSave(){
-  db.rev = (db.rev||0)+1;
+  /* rev ใหม่ = rev ของส่วนกลาง + 1 เสมอ (ไม่ใช่ +1 จากของเดิมในเครื่อง)
+     ถ้าบันทึกไม่สำเร็จหลายครั้ง rev จะค้างอยู่ที่ serverRev+1 ไม่พองขึ้นเรื่อยๆ */
+  db.rev = (serverRev>=0 ? serverRev : (Number(db.rev)||0)) + 1;
   lastRaw = JSON.stringify(db);
   cacheSave();                       // 1) เก็บลงเครื่องทันที — ต่อให้เน็ตหลุดข้อมูลก็ไม่หาย
   if(__saving){ __saveAgain = true; return; }   // มีการส่งค้างอยู่ — รวบส่งรอบเดียว
@@ -688,7 +719,22 @@ async function flushPending(){
   if(!SYNC.pending || __saving || !gasUrl()) return;
   __saving = true;
   let ok = false;
-  try{ ok = await gasSave(); } finally{ __saving = false; }
+  try{
+    /* ดึงของล่าสุดมาก่อนเสมอ — ถ้ามีคนอื่นแก้ไประหว่างที่เราส่งไม่ได้
+       ให้ยึดของส่วนกลางเป็นฐาน แล้วเติมเฉพาะรายการของเรากลับเข้าไป (ไม่ทับงานคนอื่น) */
+    const remote = await gasLoad();
+    const rRev = remote? (Number(remote.rev)||0) : -1;
+    if(remote && rRev > serverRev){
+      // มีคนอื่นแก้ไประหว่างที่เราส่งไม่ได้ → ยึดของส่วนกลางเป็นฐาน แล้วเติมเฉพาะรายการของเรา
+      db = remote; serverRev = rRev;
+      const n = pendReapply();
+      lastRaw = JSON.stringify(db); cacheSave();
+      if(meId) renderAll();
+      if(!n){ SYNC.pending = false; updateSyncBadge(); return; }   // ไม่มีของเราค้างจริง
+    }
+    db.rev = (serverRev>=0? serverRev : 0) + 1;
+    ok = await gasSave();
+  } finally{ __saving = false; }
   if(ok){
     SYNC.pending = false;
     lastRaw = JSON.stringify(db); cacheSave(); updateSyncBadge();
@@ -730,12 +776,16 @@ function openSyncInfo(){
     <div class="row" style="margin-bottom:6px;"><span class="muted">รูปสลิปที่ยังอยู่ในข้อมูล</span><b>${slips} รูป</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">เวลาซิงก์ครั้งล่าสุด</span><b>${SYNC.lastMs? SYNC.lastMs+" ms":"-"}</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">ล้มเหลวสะสม (อ่าน/บันทึก)</span><b>${SYNC.fails} / ${SYNC.saveFails}</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">สำเร็จครั้งล่าสุด</span><b>${SYNC.okAt? new Date(SYNC.okAt).toLocaleTimeString(loc(),{hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "-"}</b></div>
+    ${SYNC.lastErr? `<div class="banner-warn" style="font-size:11.5px;">🔎 สาเหตุล่าสุด: ${esc(SYNC.lastErr)}</div>`:""}
     <div class="row" style="margin-bottom:10px;"><span class="muted">เวอร์ชันแอป</span><b>${APP_VER}</b></div>
+    ${size>45000? `<div class="banner-warn" style="font-size:11.5px;">⚠️ ข้อมูลเกิน 45,000 ตัวอักษร — ถ้าฝั่ง Apps Script เก็บข้อมูลทั้งก้อนไว้ในเซลล์เดียว จะชนเพดานของ Google Sheet ที่ 50,000 ตัวอักษรต่อเซลล์ และบันทึกไม่สำเร็จถาวร</div>`:""}
     ${heavy? `<div class="banner-warn">⚠️ ข้อมูลใหญ่กว่าปกติ — ส่วนใหญ่มาจากรูปสลิป ทำให้ซิงก์ช้าและหลุดง่าย${mg? " กดปุ่ม “ลดขนาดข้อมูล” ด้านล่างได้":""}</div>`:""}
     <p class="muted" style="margin-top:0; font-size:12px;">แอปบันทึกลงเครื่องก่อนเสมอ แล้วส่งขึ้น Google Sheet ให้อัตโนมัติ (ลองซ้ำเองเมื่อไม่สำเร็จ) และดึงข้อมูลใหม่จากเพื่อนทุก 6 วินาทีขณะกำลังตี / 20 วินาทีในเวลาปกติ • รูปสลิปของนัดที่จบเกิน ${SLIP_KEEP_DAYS} วันจะถูกตัดออกอัตโนมัติเพื่อให้ซิงก์เร็ว (ยอดเงินและผู้อนุมัติยังอยู่ครบ)
     ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ต แล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างจะถูกส่งให้เองไม่หายไปไหน"}</p>
     <button class="btn btn-lime btn-block" onclick="retrySync()">🔄 ลองเชื่อมต่อใหม่</button>
     ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="cleanSlipsNow()">🧹 ลดขนาดข้อมูล (ตัดรูปสลิปเก่ากว่า ${SLIP_KEEP_DAYS} วัน)</button>`:""}
+    ${mg && slips? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="cleanSlipsAll()">🧹 ตัดรูปสลิป<b>ทั้งหมด</b>ของนัดที่จบแล้ว (${slips} รูป)</button>`:""}
     ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="closeModal(); openGasSetup();">⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)</button>`:""}
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
@@ -746,6 +796,16 @@ async function cleanSlipsNow(){
   if(!n) return toast("ไม่มีรูปสลิปเก่าให้ตัดออกแล้ว");
   await storeSave();
   toast("🧹 ตัดรูปสลิปเก่าออก "+n+" รูป — ข้อมูลเหลือ "+fmtKB(dbBytes()));
+  openSyncInfo();
+}
+/* ตัดรูปสลิปทั้งหมดของนัดที่จบแล้ว — ใช้เมื่อข้อมูลใหญ่จนบันทึกไม่ผ่าน (ยอดเงิน/ผู้อนุมัติยังอยู่ครบ) */
+async function cleanSlipsAll(){
+  if(!(isAdmin()||isDefaultMgr())) return;
+  if(!confirm("ตัดรูปสลิปทั้งหมดของนัดที่จบแล้วออกจากระบบ?\nยอดเงิน วิธีจ่าย และผู้อนุมัติยังอยู่ครบ — หายเฉพาะรูปภาพ")) return;
+  const n = pruneSlips(0);
+  if(!n) return toast("ไม่มีรูปสลิปให้ตัดออกแล้ว");
+  await storeSave();
+  toast("🧹 ตัดรูปสลิปออก "+n+" รูป — ข้อมูลเหลือ "+fmtKB(dbBytes()));
   openSyncInfo();
 }
 async function retrySync(){
@@ -2388,6 +2448,9 @@ function openGasSetup(){
     <p class="muted" style="margin-top:0;">เมื่อเชื่อมต่อแล้ว ทุกการแก้ไขจะถูกบันทึกลง Google Sheet "smashbadminton-data" ใน Google Drive อัตโนมัติ และสมาชิกทุกคนเห็นข้อมูลเดียวกัน<br><br>
     ทำครั้งเดียว: เปิด Google Sheet → ส่วนขยาย → Apps Script → วางโค้ดจากไฟล์ <b>google-apps-script-Code.gs</b> → Deploy เป็น Web app (Execute as: Me, Access: Anyone) → คัดลอก URL มาวางด้านล่าง (ขั้นตอนละเอียดอยู่ใน README)</p>
     <div class="field"><label>Web App URL (ลงท้ายด้วย /exec)</label><input type="text" id="gasInp" value="${esc(gasUrl())}" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <div class="field"><label>🗂️ URL ตัวเก็บรูปสลิปลง Drive (ไม่บังคับ — แต่ช่วยให้ซิงก์เร็วขึ้นมาก)</label>
+      <input type="text" id="slipInp" value="${esc(slipUploadUrl())}" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <p class="muted" style="margin-top:-4px; font-size:11.5px;">ถ้าใส่ช่องนี้ รูปสลิปจะถูกเก็บเป็นไฟล์ใน Google Drive แทนการฝังในฐานข้อมูล — ฐานข้อมูลจะเล็กลงหลายเท่า (วิธีติดตั้งอยู่ในไฟล์ <b>slip-uploader.gs</b>)</p>
     <button class="btn btn-lime btn-block" onclick="saveGas()">เชื่อมต่อ & บันทึก</button>
     ${gasUrl()? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="$('gasInp').value=''; saveGas();">ยกเลิกการเชื่อมต่อ</button>`:""}`);
 }
@@ -2395,9 +2458,13 @@ async function saveGas(){
   const url = $("gasInp").value.trim();
   if(url && !/^https:\/\/script\.google(usercontent)?\.com\//.test(url))
     return toast("URL ต้องขึ้นต้นด้วย https://script.google.com/", true);
+  const slipU = (($("slipInp")||{}).value||"").trim();
+  if(slipU && !/^https:\/\/script\.google(usercontent)?\.com\//.test(slipU))
+    return toast("URL ตัวเก็บรูปสลิปต้องขึ้นต้นด้วย https://script.google.com/", true);
   window.__gasOverride = url || null;
   if(!db.settings) db.settings = {};
   db.settings.gasUrl = url;
+  db.settings.slipUrl = slipU;
   if(url){
     toast("กำลังทดสอบการเชื่อมต่อ…");
     const remote = await gasLoad();
@@ -2756,7 +2823,7 @@ function renderPaymentHtml(s){
     let st;
     if(paid){
       st = `<span class="tag tag-paid" ${canMg?`onclick="togglePaid('${s.id}','${mid}')"`:'style="cursor:default;"'}>จ่ายแล้ว ✓${info? (info.method==="cash"?" 💵": info.method==="slip"?" 🧾":""):""}</span>`;
-      if(info && info.slip) st += ` <span style="cursor:pointer;" title="ดูสลิป" onclick="viewSlip('${s.id}','${mid}')">👁️</span>`;
+      if(slipSrc(info)) st += ` <span style="cursor:pointer;" title="ดูสลิป" onclick="viewSlip('${s.id}','${mid}')">👁️</span>`;
     } else if(req){
       st = `<span class="tag tag-pending" style="cursor:pointer;" onclick="openPayReview('${s.id}','${mid}')">⏳ รออนุมัติ ${req.method==="cash"?"💵":"🧾"}</span>`;
     } else {
@@ -2863,7 +2930,7 @@ function payRowClick(sid, mid){
   const s = db.sessions.find(x=>x.id===sid); if(!s) return;
   if(s.paid && s.paid[mid]){
     const info = s.payInfo && s.payInfo[mid];
-    if(info && info.slip) return viewSlip(sid, mid);
+    if(slipSrc(info)) return viewSlip(sid, mid);
     return toast("จ่ายแล้ว ✓");
   }
   if(s.payReq && s.payReq[mid]) return openPayReview(sid, mid);
@@ -2893,7 +2960,7 @@ function openPayHistory(){
       const mid = a.memberId;
       if(!(s.paid && s.paid[mid])) return;
       const info = (s.payInfo && s.payInfo[mid]) || {};
-      items.push({ sid:s.id, date:s.date, mid, amt:split[mid]||0, method:info.method||"", by:info.approvedBy, at:info.approvedAt||info.at||0, slip:info.slip||null });
+      items.push({ sid:s.id, date:s.date, mid, amt:split[mid]||0, method:info.method||"", by:info.approvedBy, at:info.approvedAt||info.at||0, slip:slipSrc(info) });
     });
   });
   items.sort((a,b)=> (b.at||0)-(a.at||0) || b.date.localeCompare(a.date));
@@ -2983,9 +3050,9 @@ async function togglePaid(sid, mid){
     // จ่ายแล้ว → ยกเลิก: ถามยืนยันกันเผลอแตะ และเก็บสลิปกลับเป็น "รออนุมัติ" ไม่ลบทิ้ง
     if(!confirm("ยกเลิกสถานะ \"จ่ายแล้ว\" ของ "+nameOf(mid)+"?\n(ถ้ามีสลิป สลิปจะกลับไปอยู่สถานะรออนุมัติ ไม่หายไป)")) return;
     const info = s.payInfo && s.payInfo[mid];
-    if(info && (info.slip || info.method==="slip" || info.method==="cash")){
+    if(info && (slipSrc(info) || info.method==="slip" || info.method==="cash")){
       if(!s.payReq) s.payReq = {};
-      s.payReq[mid] = { method:info.method||"slip", slip:info.slip||null, amountRead:info.amountRead!=null? info.amountRead:null, matched:false, note:info.note||"", at:info.at||Date.now(), by:info.approvedBy||meId };
+      s.payReq[mid] = Object.assign({ method:info.method||"slip", amountRead:info.amountRead!=null? info.amountRead:null, matched:false, note:info.note||"", at:info.at||Date.now(), by:info.approvedBy||meId }, slipFields(info));
     }
     s.paid[mid] = false;
     if(s.payInfo) delete s.payInfo[mid];
@@ -2994,7 +3061,7 @@ async function togglePaid(sid, mid){
     if(!s.payInfo) s.payInfo = {};
     // ถ้ามีคำขอค้างอยู่ (มีสลิป/ข้อความ) ให้ใช้ข้อมูลนั้น ไม่ทับด้วย manual เปล่าๆ
     const req = s.payReq && s.payReq[mid];
-    if(req) s.payInfo[mid] = { method:req.method, slip:req.slip||null, amountRead:req.amountRead!=null? req.amountRead:null, note:req.note||"", at:req.at, approvedBy:meId, approvedAt:Date.now() };
+    if(req) s.payInfo[mid] = Object.assign({ method:req.method, amountRead:req.amountRead!=null? req.amountRead:null, note:req.note||"", at:req.at, approvedBy:meId, approvedAt:Date.now() }, slipFields(req));
     else if(!s.payInfo[mid]) s.payInfo[mid] = { method:"manual", at:Date.now(), approvedBy:meId };
     if(s.payReq) delete s.payReq[mid];
     if(s.payNudge) delete s.payNudge[mid];
@@ -3110,6 +3177,30 @@ function viewPayQR(){
     <img src="${pq}" style="width:100%; border-radius:14px; background:#fff;">
     ${db.settings.payNote? `<div class="notx muted" style="white-space:pre-wrap; font-size:12.5px; margin-top:10px;">${esc(db.settings.payNote)}</div>`:""}`);
 }
+/* =====================================================
+   🗂️ เก็บรูปสลิปไว้ใน Google Drive (ไม่เก็บรูปในฐานข้อมูลที่ซิงก์)
+   — ฐานข้อมูลเก็บแค่ลิงก์รูป (~100 ตัวอักษร) แทนรูป base64 (~150,000 ตัวอักษร)
+   — ใช้ Web App ตัวที่สอง (slip uploader) แยกจากตัวเดิม จึงไม่กระทบระบบที่ใช้อยู่
+   — ถ้ายังไม่ได้ตั้งค่า หรืออัปโหลดไม่สำเร็จ จะถอยไปฝังรูปแบบเดิมให้อัตโนมัติ
+   ===================================================== */
+function slipUploadUrl(){ return (db.settings && db.settings.slipUrl) || ""; }
+/* ที่อยู่รูปสำหรับแสดงผล — รองรับทั้งแบบใหม่ (Drive) และแบบเดิม (ฝังในฐานข้อมูล) */
+function slipSrc(o){ return (o && (o.slipUrl || o.slip)) || ""; }
+/* คัดลอกข้อมูลรูปสลิปข้ามระหว่าง payReq ↔ payInfo ให้ครบทุกแบบ */
+function slipFields(o){
+  return { slip:(o&&o.slip)||null, slipUrl:(o&&o.slipUrl)||null, slipId:(o&&o.slipId)||null };
+}
+async function uploadSlipToDrive(dataUrl, label){
+  const url = slipUploadUrl(); if(!url) return null;
+  try{
+    const body = JSON.stringify({ k:clubKey(), name:label||("slip-"+Date.now()), data:dataUrl });
+    const res = await fetchT(url, {method:"POST", body}, 30000);
+    const out = await res.json();
+    if(out && out.ok && out.url) return { slipUrl:out.url, slipId:out.id||null };
+  }catch(e){}
+  return null;
+}
+
 function openPaySlip(sid, mid){
   const inp = document.createElement("input");
   inp.type = "file"; inp.accept = "image/*";
@@ -3166,7 +3257,14 @@ async function submitSlip(){
   if(!s.payReq) s.payReq = {};
   const mid = d.mid || meId;
   const note = (($("slipNoteInp")||{}).value||"").trim().slice(0,80);
-  s.payReq[mid] = { method:"slip", slip:d.dataUrl, amountRead:d.amountRead, matched:!!d.matched, at:Date.now(), by:meId, note };
+  let up = null;
+  if(slipUploadUrl()){
+    toast("กำลังอัปโหลดสลิปขึ้น Google Drive…");
+    up = await uploadSlipToDrive(d.dataUrl, "slip-"+nameOf(mid)+"-"+(s.date||"")); 
+    if(!up) toast("อัปโหลดขึ้น Drive ไม่สำเร็จ — เก็บรูปไว้ในระบบแทน", true);
+  }
+  s.payReq[mid] = { method:"slip", slip: up? null : d.dataUrl, slipUrl: up? up.slipUrl : null, slipId: up? up.slipId : null,
+    amountRead:d.amountRead, matched:!!d.matched, at:Date.now(), by:meId, note };
   pendAdd("payreq", { sid:s.id, mid, obj:s.payReq[mid] });
   const sid = d.sid;
   window.__slipDraft = null;
@@ -3231,7 +3329,7 @@ function openPayReview(sid, mid){
     <div class="row" style="margin-bottom:8px;"><span class="muted">วิธีชำระ</span><b>${req.method==="cash"?"💵 เงินสด":"🧾 โอนเงิน (แนบสลิป)"}</b></div>
     <div class="row" style="margin-bottom:10px;"><span class="muted">แจ้งเมื่อ</span><b>${req.at? new Date(req.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"-"}</b></div>
     ${req.note? `<div style="margin-bottom:10px; padding:9px 12px; background:rgba(255,194,75,.1); border:1px dashed rgba(255,194,75,.45); border-radius:11px;">📝 ข้อความจากผู้จ่าย: <b class="notx">${esc(req.note)}</b></div>`:""}
-    ${req.slip? `<img src="${req.slip}" class="slip-img" alt="slip" style="margin-bottom:10px;">`:""}
+    ${slipSrc(req)? `<img src="${slipSrc(req)}" class="slip-img" alt="slip" style="margin-bottom:10px;" referrerpolicy="no-referrer">`:""}
     ${ocrLine}
     ${mg? `
       <button class="btn btn-lime btn-block" onclick="approvePay('${sid}','${mid}')">✅ อนุมัติ — ยืนยันรับเงินแล้ว</button>
@@ -3247,7 +3345,7 @@ async function approvePay(sid, mid){
   if(!s.paid) s.paid = {};
   if(!s.payInfo) s.payInfo = {};
   s.paid[mid] = true;
-  s.payInfo[mid] = { method:req.method, slip:req.slip||null, amountRead:req.amountRead!=null? req.amountRead:null, note:req.note||"", at:req.at, approvedBy:meId, approvedAt:Date.now() };
+  s.payInfo[mid] = Object.assign({ method:req.method, amountRead:req.amountRead!=null? req.amountRead:null, note:req.note||"", at:req.at, approvedBy:meId, approvedAt:Date.now() }, slipFields(req));
   delete s.payReq[mid];
   if(s.payNudge) delete s.payNudge[mid];
   await storeSave(); renderAll(); openPayment(sid);
@@ -3262,10 +3360,10 @@ async function rejectPay(sid, mid){
 }
 function viewSlip(sid, mid){
   const s = db.sessions.find(x=>x.id===sid); if(!s) return;
-  const info = s.payInfo && s.payInfo[mid]; if(!info || !info.slip) return;
+  const info = s.payInfo && s.payInfo[mid]; if(!slipSrc(info)) return;
   modal(`
     <div class="modal-head"><h3>🧾 สลิปของ ${emojiOf(mid)} ${esc(nameOf(mid))}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <img src="${info.slip}" class="slip-img" alt="slip">
+    <img src="${slipSrc(info)}" class="slip-img" alt="slip" referrerpolicy="no-referrer">
     ${info.note? `<div style="margin:10px 0 0; padding:9px 12px; background:rgba(255,194,75,.1); border:1px dashed rgba(255,194,75,.45); border-radius:11px;">📝 <b class="notx">${esc(info.note)}</b></div>`:""}
     <p class="muted" style="margin:10px 0 12px;">อนุมัติโดย ${emojiOf(info.approvedBy)} ${esc(nameOf(info.approvedBy))}${info.approvedAt? " • "+new Date(info.approvedAt).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</p>
     <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
@@ -4124,7 +4222,7 @@ document.addEventListener("visibilitychange", ()=>{
 /* รับข้อมูลชุดใหม่จากส่วนกลางมาใช้ พร้อมเติมรายการของเราที่ยังไม่ขึ้นฐานกลางกลับเข้าไป */
 function applyRemote(remote){
   if(!remote || (remote.rev||0) <= (db.rev||0)) return;
-  db = remote;
+  db = remote; serverRev = Number(remote.rev)||0;
   const n = pendReapply();
   lastRaw = JSON.stringify(db); cacheSave();
   if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return; }
@@ -4165,13 +4263,14 @@ async function init(){
   pendLoad();
   // 1) สำเนาในเครื่อง (เร็วที่สุด — ไม่ต้องรอเน็ต) → 2) Google Sheet → 3) เริ่มใหม่
   const cached = cacheLoad();
-  let loaded = cached;
+  let loaded = cached, fromRemote = false;
   if(gasUrl()){
     const remote = await gasLoad();
     if(remote){
-      // ถ้าในเครื่องใหม่กว่า แปลว่ามีของค้างส่งอยู่ — ใช้ของในเครื่องแล้วส่งขึ้นให้
-      if(cached && (cached.rev||0) > (remote.rev||0)){ loaded = cached; SYNC.pending = true; }
-      else loaded = remote;
+      /* ⚠️ กติกาสำคัญ: ข้อมูลของส่วนกลางคือ "ฐาน" เสมอ ห้ามเอาสำเนาในเครื่องไปทับ
+         เพราะเครื่องที่ค้างส่งมานานจะมีข้อมูลเก่า แล้วลบงานของทั้งก๊วนทิ้ง
+         ของที่เราค้างอยู่จะถูกเติมกลับทีละรายการผ่าน pendReapply() แทน */
+      loaded = remote; fromRemote = true;
     } else if(cached){
       SYNC.pending = true;   // เน็ต/ชีตมีปัญหา — ใช้ของในเครื่องไปก่อน แล้วค่อยส่งทีหลัง
     }
@@ -4179,6 +4278,10 @@ async function init(){
   window.__booting = false;
   db = loaded || seedDb();
   lastRaw = JSON.stringify(db);
+  if(fromRemote){
+    const n = pendReapply();       // เติมเฉพาะรายการของเราที่ยังไม่ขึ้นส่วนกลาง
+    if(n){ SYNC.pending = true; cacheSave(); }
+  }
   if(!loaded) await storeSave();
   else if(pruneSlips()) await storeSave();   // ตัดรูปสลิปเก่าออก คุมขนาดข้อมูลให้ซิงก์เร็ว
   else if(SYNC.pending) flushPending();
