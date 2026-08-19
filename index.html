@@ -116,6 +116,8 @@ label{ display:block; font-size:13.5px; font-weight:600; color:var(--ink-soft); 
 .chip.pa::after{ content:"A"; color:var(--blue); font-weight:800; }
 .chip.pb{ border-color:var(--coral); background:rgba(255,107,94,.12); }
 .chip.pb::after{ content:"B"; color:var(--coral); font-weight:800; }
+.chip-pro{ display:inline-block; font-family:'Prompt',sans-serif; font-size:9.5px; font-weight:800; color:#3a2a00; background:linear-gradient(135deg,#ffd75e,#ffb347); padding:1px 5px 2px; border-radius:7px; margin-left:3px; letter-spacing:.2px; }
+.chip-el{ font-family:'Prompt',sans-serif; font-size:11px; font-weight:700; color:var(--ink-soft); margin-left:3px; }
 .chips{ display:flex; flex-wrap:wrap; gap:8px; }
 .empty{ text-align:center; padding:26px 10px; color:var(--ink-soft); font-size:13.5px; }
 .empty .big{ font-size:32px; margin-bottom:6px; }
@@ -364,6 +366,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
+const APP_VER = "2026.08.19";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -483,6 +486,14 @@ let histOpen = null;    // session id opened from history
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzkNtWD-Ty1CsvTY5Im1jnc_tR61i0S-HL_yUiD4GC_QdSLSZIVPZAGYRIwg0eRh5Kr/exec";
 
 let gasOK = false;
+
+/* ---------- ตัวชี้วัดการซิงก์ (ไว้วินิจฉัยว่า "ช้า/ไม่สำเร็จ" เกิดจากอะไร) ---------- */
+const SYNC = { lastMs:0, lastAt:0, fails:0, saveFails:0, bytes:0, pending:false };
+const CACHE_LS = "smash-db-cache";   // สำเนาข้อมูลล่าสุดในเครื่อง — เปิดแอปไว + กันข้อมูลหายตอนเน็ตหลุด
+const PEND_LS  = "smash-pending";    // รายการที่ "เรา" เพิ่งเพิ่ม แต่ยังไม่ยืนยันว่าขึ้นฐานกลางแล้ว
+const NET_GET_MS = 12000, NET_POST_MS = 20000;   // timeout ของการอ่าน/เขียน
+const SLIP_KEEP_DAYS = 30;           // เก็บรูปสลิปของนัดที่จบแล้ว 30 วัน แล้วตัดออกเพื่อคุมขนาดข้อมูล
+
 function gasUrl(){
   if(window.__gasOverride) return window.__gasOverride;
   if(GAS_URL) return GAS_URL;
@@ -491,11 +502,124 @@ function gasUrl(){
   return "";
 }
 function clubKey(){ return window.__clubKey || lsGet(CLUB_LS) || ""; }
+
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+/* fetch ที่มี timeout — จำเป็นมาก: ถ้าคำขอค้าง วงจรดึงข้อมูลจะหยุดทั้งสายจนกว่าจะรีเฟรชหน้า */
+async function fetchT(url, opts, ms){
+  let ac = null;
+  try{ ac = ("AbortController" in window)? new AbortController() : null; }catch(e){}
+  const tm = setTimeout(function(){ try{ if(ac) ac.abort(); }catch(e){} }, ms);
+  try{ return await fetch(url, Object.assign({}, opts||{}, ac? {signal:ac.signal} : {})); }
+  finally{ clearTimeout(tm); }
+}
+
+/* ---------- สำเนาข้อมูลในเครื่อง (แทนที่ window.storage ซึ่งมีเฉพาะใน Claude Artifact ไม่มีบน GitHub Pages) ---------- */
+function cacheSave(){
+  try{
+    if(!window.localStorage){ storageOK = false; return; }
+    localStorage.setItem(CACHE_LS, lastRaw);
+    storageOK = true;
+  }catch(e){ storageOK = false; }   // เต็มโควตา หรือเบราว์เซอร์ปิดกั้น
+}
+function cacheLoad(){
+  try{ const v = lsGet(CACHE_LS); return v? JSON.parse(v) : null; }catch(e){ return null; }
+}
+
+/* ---------- รายการค้างส่งของเราเอง — ใช้กู้คืนเมื่อข้อมูลชนกับเพื่อน หรือเน็ตหลุด ---------- */
+let __pend = [];
+function pendLoad(){ try{ __pend = JSON.parse(lsGet(PEND_LS)||"[]") || []; }catch(e){ __pend = []; } }
+function pendStore(){ try{ lsSet(PEND_LS, JSON.stringify(__pend)); }catch(e){} }
+function pendAdd(kind, payload){
+  __pend.push({ kind, payload, at:Date.now() });
+  if(__pend.length>60) __pend.shift();
+  pendStore();
+}
+function pendPresent(p){
+  try{
+    if(p.kind==="set"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid);
+      return !s || (s.sets||[]).some(x=>x.id===p.payload.obj.id);
+    }
+    if(p.kind==="board")    return (db.board||[]).some(x=>x.id===p.payload.id);
+    if(p.kind==="feedback") return (db.feedback||[]).some(x=>x.id===p.payload.id);
+    if(p.kind==="payreq"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid);
+      return !s || !!(s.payReq && s.payReq[p.payload.mid]) || !!(s.paid && s.paid[p.payload.mid]);
+    }
+  }catch(e){}
+  return true;
+}
+/* ทิ้งรายการที่ขึ้นฐานกลางแล้ว หรือเก่าเกิน 30 นาที */
+function pendSync(){
+  const now = Date.now();
+  __pend = __pend.filter(p => (now - p.at) < 1800000 && !pendPresent(p));
+  pendStore();
+}
+/* ใส่รายการของเราที่หายไปกลับเข้าไปในข้อมูลชุดใหม่ที่รับมาจากส่วนกลาง */
+function pendReapply(){
+  let n = 0;
+  __pend.forEach(p=>{
+    try{
+      if(p.kind==="set"){
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        if(!s.sets) s.sets = [];
+        if(!s.sets.some(x=>x.id===p.payload.obj.id)){
+          s.sets.push(p.payload.obj);
+          if(p.payload.obj.shuttle) s.shuttlesUsed = (Number(s.shuttlesUsed)||0) + 1;
+          n++;
+        }
+      } else if(p.kind==="board"){
+        if(!db.board) db.board = [];
+        if(!db.board.some(x=>x.id===p.payload.id)){ db.board.push(p.payload); n++; }
+      } else if(p.kind==="feedback"){
+        if(!db.feedback) db.feedback = [];
+        if(!db.feedback.some(x=>x.id===p.payload.id)){ db.feedback.push(p.payload); n++; }
+      } else if(p.kind==="payreq"){
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        if(!s.payReq) s.payReq = {};
+        if(!s.payReq[p.payload.mid] && !(s.paid && s.paid[p.payload.mid])){ s.payReq[p.payload.mid] = p.payload.obj; n++; }
+      }
+    }catch(e){}
+  });
+  return n;
+}
+
+/* ---------- ขนาดข้อมูล: ตัวการหลักที่ทำให้ซิงก์ช้า ---------- */
+function slipCount(){
+  let n = 0;
+  (db.sessions||[]).forEach(s=>{
+    Object.keys(s.payInfo||{}).forEach(k=>{ if(s.payInfo[k] && s.payInfo[k].slip) n++; });
+    Object.keys(s.payReq||{}).forEach(k=>{ if(s.payReq[k] && s.payReq[k].slip) n++; });
+  });
+  return n;
+}
+function dbBytes(){ try{ return JSON.stringify(db).length; }catch(e){ return (lastRaw||"").length; } }
+function fmtKB(n){ return n>=1048576 ? (n/1048576).toFixed(1)+" MB" : Math.round(n/1024)+" KB"; }
+/* ตัดรูปสลิปของนัดที่จบและเก่ากว่า SLIP_KEEP_DAYS ออก (ยอด/วิธีจ่าย/ผู้อนุมัติยังอยู่ครบ) */
+function pruneSlips(days){
+  const cut = Date.now() - (days==null? SLIP_KEEP_DAYS : days)*86400000;
+  let n = 0;
+  (db.sessions||[]).forEach(s=>{
+    if(s.status!=="done") return;
+    const t = s.finishedAt || Date.parse(String(s.date)+"T23:59:59") || 0;
+    if(!t || t > cut) return;
+    Object.keys(s.payInfo||{}).forEach(k=>{
+      const v = s.payInfo[k];
+      if(v && v.slip){ v.slip = null; v.slipCleared = true; n++; }
+    });
+  });
+  return n;
+}
+
+/* ---------- อ่าน/เขียนฐานข้อมูลกลาง (Google Sheet ผ่าน Apps Script) ---------- */
 async function gasLoad(){
   const url = gasUrl(); if(!url) return null;
+  const t0 = Date.now();
   try{
-    const res = await fetch(url + (url.indexOf("?")>=0?"&":"?") + "api=1&k=" + encodeURIComponent(clubKey()), {method:"GET"});
-    const out = await res.json();
+    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + "api=1&k=" + encodeURIComponent(clubKey()), {method:"GET"}, NET_GET_MS);
+    const txt = await res.text();
+    SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = txt.length;
+    const out = JSON.parse(txt);
     if(out && out.ok===false && out.error==="unauthorized"){
       // รหัสก๊วนไม่ถูกต้อง/ถูกเปลี่ยน — ให้ใส่ใหม่
       lsDel(CLUB_LS); window.__clubKey = null; gasOK = false;
@@ -504,52 +628,81 @@ async function gasLoad(){
     }
     if(out && out.ok){
       gasOK = true;
-      if(out.data){ lastRaw = JSON.stringify(out.data); return out.data; }
+      if(out.data){ return out.data; }
       return null;   // ชีตยังว่าง — จะถูกเติมเมื่อบันทึกครั้งแรก
     }
-  }catch(e){}
+  }catch(e){ SYNC.fails++; }
   gasOK = false; return null;
 }
 async function gasSave(){
   const url = gasUrl(); if(!url) return false;
-  try{
-    const res = await fetch(url, {method:"POST", body: JSON.stringify({data: db, k: clubKey()})});
-    const out = await res.json();
-    if(out && out.ok){ gasOK = true; return true; }
-    if(out && out.conflict && out.data){
-      // มีคนบันทึกข้อมูลใหม่กว่าไปก่อน — รับของใหม่มาใช้
-      gasOK = true;
-      db = out.data; lastRaw = JSON.stringify(db);
-      toast("มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว ลองทำรายการอีกครั้ง");
-      if(meId) renderAll();
-      return true;
-    }
-  }catch(e){}
-  gasOK = false; return false;
+  for(let i=0; i<3; i++){
+    const t0 = Date.now();
+    try{
+      const body = JSON.stringify({data: db, k: clubKey()});
+      const res = await fetchT(url, {method:"POST", body}, NET_POST_MS);
+      const out = await res.json();
+      SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
+      if(out && out.ok){ gasOK = true; pendSync(); return true; }
+      if(out && out.conflict && out.data){
+        // มีคนบันทึกข้อมูลใหม่กว่าไปก่อน — รับของใหม่มาเป็นฐาน แล้วเติมรายการของเรากลับเข้าไป
+        gasOK = true;
+        db = out.data;
+        const n = pendReapply();
+        lastRaw = JSON.stringify(db); cacheSave();
+        if(meId) renderAll();
+        if(n && i<2){ db.rev = (db.rev||0)+1; continue; }   // ส่งซ้ำพร้อมรายการของเรา
+        toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว");
+        return true;
+      }
+    }catch(e){ SYNC.fails++; }
+    if(i<2) await sleep(700*(i+1)*(i+1));   // หน่วงก่อนลองใหม่ 0.7 วิ → 2.8 วิ
+  }
+  gasOK = false; SYNC.saveFails++; return false;
 }
-async function claudeLoad(){
-  try{
-    const r = await window.storage.get(KEY, true);
-    storageOK = true;
-    if(r && r.value){ lastRaw = r.value; return JSON.parse(r.value); }
-    return null;
-  }catch(e){ storageOK = false; return null; }
-}
+
+/* ---------- บันทึก: ลงเครื่องก่อนเสมอ แล้วค่อยส่งขึ้นส่วนกลาง (กันงานซ้อนกันด้วย mutex) ---------- */
+let __saving = false, __saveAgain = false;
 async function storeSave(){
   db.rev = (db.rev||0)+1;
   lastRaw = JSON.stringify(db);
-  const viaGas = await gasSave();                       // 1) Google Sheet
+  cacheSave();                       // 1) เก็บลงเครื่องทันที — ต่อให้เน็ตหลุดข้อมูลก็ไม่หาย
+  if(__saving){ __saveAgain = true; return; }   // มีการส่งค้างอยู่ — รวบส่งรอบเดียว
+  __saving = true;
+  let ok = false;
   try{
-    const ok = await window.storage.set(KEY, JSON.stringify(db), true);  // 2) Claude storage (สำรอง)
-    storageOK = !!ok;
-  }catch(e){ storageOK = false; }
-  if(gasUrl() && !viaGas) toast("⚠️ ซิงก์ Google Sheet ไม่สำเร็จ — จะลองใหม่ในการบันทึกครั้งถัดไป", true);
+    do{
+      __saveAgain = false;
+      ok = await gasSave();          // 2) ส่งขึ้น Google Sheet (มี retry ในตัว)
+      lastRaw = JSON.stringify(db); cacheSave();
+    }while(__saveAgain);
+  } finally{ __saving = false; }
+  if(gasUrl() && !ok){
+    SYNC.pending = true;
+    toast("⚠️ ส่งขึ้นระบบกลางไม่สำเร็จ — เก็บไว้ในเครื่องแล้ว ระบบจะส่งให้เองเมื่อเน็ตกลับมา", true);
+  } else SYNC.pending = false;
   updateSyncBadge();
 }
+/* ส่งข้อมูลที่ค้างอยู่ในเครื่องขึ้นส่วนกลาง — เรียกอัตโนมัติทุกรอบดึงข้อมูล และตอนเน็ตกลับมา */
+async function flushPending(){
+  if(!SYNC.pending || __saving || !gasUrl()) return;
+  __saving = true;
+  let ok = false;
+  try{ ok = await gasSave(); } finally{ __saving = false; }
+  if(ok){
+    SYNC.pending = false;
+    lastRaw = JSON.stringify(db); cacheSave(); updateSyncBadge();
+    if(meId) renderAll();
+    toast("☁️ ส่งข้อมูลที่ค้างขึ้นระบบกลางแล้ว");
+  }
+}
+window.addEventListener("online", function(){ flushPending(); pollRemote(); });
+
 function syncLabel(){
-  if(gasUrl() && gasOK) return "☁️ Google Sheet (อัตโนมัติ)";
+  if(gasUrl() && gasOK && !SYNC.pending) return "☁️ Google Sheet (อัตโนมัติ)";
+  if(gasUrl() && SYNC.pending) return "⏳ มีข้อมูลค้างส่ง — เก็บไว้ในเครื่องแล้ว";
   if(gasUrl() && !gasOK) return "⚠️ Google Sheet — เชื่อมต่อไม่ได้";
-  if(storageOK) return "💾 ที่เก็บข้อมูลกลางของ Claude";
+  if(storageOK) return "💾 เก็บในเครื่องนี้เท่านั้น (ไม่แชร์กับเพื่อน)";
   return "🚫 โหมดทดลอง";
 }
 function updateSyncBadge(){
@@ -557,33 +710,53 @@ function updateSyncBadge(){
   if(!el) return;
   el.onclick = openSyncInfo;
   el.style.cursor = "pointer";
-  if(gasUrl() && gasOK){ el.style.display="none"; }
+  if(gasUrl() && SYNC.pending){ el.style.display="block"; el.innerHTML="⏳ มีข้อมูลค้างส่ง — เก็บไว้ในเครื่องแล้ว จะส่งให้อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
+  else if(gasUrl() && gasOK){ el.style.display="none"; }
   else if(gasUrl() && !gasOK){ el.style.display="block"; el.innerHTML="⚠️ ซิงก์ไม่สำเร็จชั่วคราว — จะลองใหม่อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
   else if(storageOK){ el.style.display="none"; }
   else { el.style.display="block"; el.innerHTML="⚠️ โหมดทดลอง — <u>แตะดูรายละเอียด</u>"; }
 }
 
-/* popup รายละเอียดการเชื่อมต่อ (อ่าน/บันทึกทำอัตโนมัติ — หน้าหลักไม่แสดงข้อความยาว) */
+/* popup รายละเอียดการเชื่อมต่อ + ตัวเลขวินิจฉัย (ขนาดข้อมูล / เวลาที่ใช้ / จำนวนครั้งที่ล้มเหลว) */
 function openSyncInfo(){
-  const ok = gasUrl() && gasOK;
+  const ok = gasUrl() && gasOK && !SYNC.pending;
+  const size = dbBytes(), slips = slipCount();
+  const heavy = size > 700000;
+  const mg = isAdmin() || isDefaultMgr();
   modal(`
     <div class="modal-head"><h3>☁️ สถานะการเชื่อมต่อข้อมูล</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <div class="row" style="margin-bottom:10px;"><span class="muted">สถานะตอนนี้</span><b>${syncLabel()}</b></div>
-    <p class="muted" style="margin-top:0;">แอปอ่านและบันทึกข้อมูลลง Google Sheet ให้อัตโนมัติทุกครั้งที่มีการแก้ไข และดึงข้อมูลใหม่จากเพื่อนทุก 15 วินาที — ไม่ต้องกดอะไรเพิ่ม
-    ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: เช็คอินเทอร์เน็ต แล้วกด \"ลองเชื่อมต่อใหม่\" ข้อมูลที่ค้างจะถูกส่งให้เองในการบันทึกครั้งถัดไป"}</p>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">สถานะตอนนี้</span><b>${syncLabel()}</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">ขนาดข้อมูลที่รับ-ส่งทุกครั้ง</span><b style="color:${heavy?"var(--amber)":"var(--lime)"};">${fmtKB(size)}</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">รูปสลิปที่ยังอยู่ในข้อมูล</span><b>${slips} รูป</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">เวลาซิงก์ครั้งล่าสุด</span><b>${SYNC.lastMs? SYNC.lastMs+" ms":"-"}</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">ล้มเหลวสะสม (อ่าน/บันทึก)</span><b>${SYNC.fails} / ${SYNC.saveFails}</b></div>
+    <div class="row" style="margin-bottom:10px;"><span class="muted">เวอร์ชันแอป</span><b>${APP_VER}</b></div>
+    ${heavy? `<div class="banner-warn">⚠️ ข้อมูลใหญ่กว่าปกติ — ส่วนใหญ่มาจากรูปสลิป ทำให้ซิงก์ช้าและหลุดง่าย${mg? " กดปุ่ม “ลดขนาดข้อมูล” ด้านล่างได้":""}</div>`:""}
+    <p class="muted" style="margin-top:0; font-size:12px;">แอปบันทึกลงเครื่องก่อนเสมอ แล้วส่งขึ้น Google Sheet ให้อัตโนมัติ (ลองซ้ำเองเมื่อไม่สำเร็จ) และดึงข้อมูลใหม่จากเพื่อนทุก 6 วินาทีขณะกำลังตี / 20 วินาทีในเวลาปกติ • รูปสลิปของนัดที่จบเกิน ${SLIP_KEEP_DAYS} วันจะถูกตัดออกอัตโนมัติเพื่อให้ซิงก์เร็ว (ยอดเงินและผู้อนุมัติยังอยู่ครบ)
+    ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ต แล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างจะถูกส่งให้เองไม่หายไปไหน"}</p>
     <button class="btn btn-lime btn-block" onclick="retrySync()">🔄 ลองเชื่อมต่อใหม่</button>
-    ${(isAdmin()||isDefaultMgr())? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="closeModal(); openGasSetup();">⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)</button>`:""}
+    ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="cleanSlipsNow()">🧹 ลดขนาดข้อมูล (ตัดรูปสลิปเก่ากว่า ${SLIP_KEEP_DAYS} วัน)</button>`:""}
+    ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="closeModal(); openGasSetup();">⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)</button>`:""}
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+async function cleanSlipsNow(){
+  if(!(isAdmin()||isDefaultMgr())) return;
+  const n = pruneSlips();
+  if(!n) return toast("ไม่มีรูปสลิปเก่าให้ตัดออกแล้ว");
+  await storeSave();
+  toast("🧹 ตัดรูปสลิปเก่าออก "+n+" รูป — ข้อมูลเหลือ "+fmtKB(dbBytes()));
+  openSyncInfo();
 }
 async function retrySync(){
   toast("กำลังเชื่อมต่อ…");
   const remote = await gasLoad();
-  if(remote && (remote.rev||0) > (db.rev||0)){ db = remote; }
+  if(remote && (remote.rev||0) > (db.rev||0)){ db = remote; pendReapply(); }
+  __pollFail = 0;
   await storeSave();
   updateSyncBadge(); if(meId) renderAll();
   closeModal();
-  toast(gasOK? "☁️ เชื่อมต่อสำเร็จ ข้อมูลซิงก์แล้ว" : "ยังเชื่อมต่อไม่ได้ — จะลองใหม่อัตโนมัติ", !gasOK);
+  toast(gasOK? "☁️ เชื่อมต่อสำเร็จ ข้อมูลซิงก์แล้ว" : "ยังเชื่อมต่อไม่ได้ — ข้อมูลถูกเก็บในเครื่อง จะส่งให้เองอัตโนมัติ", !gasOK);
 }
 
 function seedDb(){
@@ -1248,7 +1421,11 @@ function toast(msg, err){
   clearTimeout(window.__tt); window.__tt = setTimeout(()=> el.className="", 2400);
 }
 function modal(html){ $("modalBody").innerHTML = html; translateDom($("modalBody")); $("modalBg").classList.add("show"); }
-function closeModal(){ $("modalBg").classList.remove("show"); }
+function closeModal(){
+  $("modalBg").classList.remove("show");
+  // ระหว่างเปิดหน้าต่างอยู่ ถ้ามีข้อมูลใหม่จากเพื่อนเข้ามา จะพักไว้ก่อน — ปิดแล้วค่อยอัปเดตให้
+  if(__pendingRemote){ const r = __pendingRemote; __pendingRemote = null; applyRemote(r); }
+}
 $("modalBg").addEventListener("click", e=>{ if(e.target.id==="modalBg") closeModal(); });
 function modalOpen(){ return $("modalBg").classList.contains("show"); }
 
@@ -1575,6 +1752,18 @@ function renderMeCap(){
   $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="nm">${esc(m.name)}</span>${proBadge(m.id)}${roleTag}`;
 }
 
+/* เมนูหลัก — ปุ่มใหญ่ 4 ปุ่ม (รายละเอียดเปิดเป็น popup)
+   ใช้ซ้ำท้ายทุกหน้า: นัดตี / สมาชิก / สถิติ / ประวัติ / Pro เพื่อให้กดถึงได้จากทุกที่ */
+function mainMenu(){
+  const fbCount = (db.feedback||[]).length;
+  return `<div class="menu-grid">
+    <button class="menu-btn" onclick="openPastList()"><span class="mi">🏁</span>สรุปนัดที่ผ่านมา</button>
+    <button class="menu-btn" onclick="openPayNow()"><span class="mi">💰</span>จ่ายเงินค่าตี</button>
+    <button class="menu-btn" onclick="openFeedbackMenu()"><span class="mi">💬</span>ความคิดเห็น${isAdmin()&&fbCount? ` (${fbCount})`:""}</button>
+    <button class="menu-btn" onclick="openManageMenu()"><span class="mi">⚙️</span>จัดการก๊วน</button>
+  </div>`;
+}
+
 /* =====================================================
    VIEW: นัดตี  (open → playing → done)
    ===================================================== */
@@ -1619,14 +1808,7 @@ function renderPlay(){
     html += renderPlayingSession(s);
   }
 
-  // เมนูหลัก — ปุ่มใหญ่ 4 ปุ่ม รายละเอียดทั้งหมดเปิดเป็น popup
-  const fbCount = (db.feedback||[]).length;
-  html += `<div class="menu-grid">
-    <button class="menu-btn" onclick="openPastList()"><span class="mi">🏁</span>สรุปนัดที่ผ่านมา</button>
-    <button class="menu-btn" onclick="openPayNow()"><span class="mi">💰</span>จ่ายเงินค่าตี</button>
-    <button class="menu-btn" onclick="openFeedbackMenu()"><span class="mi">💬</span>ความคิดเห็น${isAdmin()&&fbCount? ` (${fbCount})`:""}</button>
-    <button class="menu-btn" onclick="openManageMenu()"><span class="mi">⚙️</span>จัดการก๊วน</button>
-  </div>`;
+  html += mainMenu();
   v.innerHTML = html;
 }
 
@@ -1749,7 +1931,9 @@ async function postBoardMsg(){
   if(!v) return toast("พิมพ์ข้อความก่อนนะ", true);
   const type = (window.__brdType==="ann" && isMgrRole(meId))? "ann" : "msg";
   db.board = db.board||[];
-  db.board.push({ id:uid(), from:meId, text:v.slice(0,300), at:Date.now(), type });
+  const bmsg = { id:uid(), from:meId, text:v.slice(0,300), at:Date.now(), type };
+  db.board.push(bmsg);
+  pendAdd("board", bmsg);
   if(db.board.length>200) db.board = db.board.slice(-200);
   await storeSave();
   closeModal(); renderAll();   // ส่งแล้วปิดกล่องอัตโนมัติ
@@ -1917,7 +2101,7 @@ function renderSetForm(s){
     const m = mem(a.memberId); if(!m) return "";
     const arr = team==="A"? setDraft.teamA : setDraft.teamB;
     const cls = arr.includes(m.id) ? (team==="A"?"pa":"pb") : "";
-    return `<span class="chip ${cls}" onclick="pickSetTeam('${team}','${m.id}')"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
+    return `<span class="chip ${cls}" onclick="pickSetTeam('${team}','${m.id}')"><span class="av">${m.emoji}</span>${esc(m.name)}${proMark(m.id)}</span>`;
   }).join("");
   const courtOpts = (s.courts||[]).map(c=>`<option value="${esc(c.no)}" ${String(setDraft.court)===String(c.no)?"selected":""}>คอร์ท ${esc(c.no)}</option>`).join("");
   return `
@@ -1951,8 +2135,10 @@ async function addSet(sid){
   if(d.teamA.length===0 || d.teamB.length===0) return toast("เลือกผู้เล่นทั้งสองทีมก่อน", true);
   if(d.scoreA==="" || d.scoreB==="") return toast("กรอกคะแนนให้ครบทั้งสองทีม", true);
   if(Number(d.scoreA)===Number(d.scoreB)) return toast("คะแนนเท่ากันไม่ได้ ต้องมีทีมชนะ", true);
-  s.sets.push({ id:uid(), court:d.court||((s.courts[0]||{}).no||"-"), teamA:[...d.teamA], teamB:[...d.teamB],
-    scoreA:Number(d.scoreA), scoreB:Number(d.scoreB), shuttle:!!d.shuttle, recordedBy:meId, at:Date.now() });
+  const newSet = { id:uid(), court:d.court||((s.courts[0]||{}).no||"-"), teamA:[...d.teamA], teamB:[...d.teamB],
+    scoreA:Number(d.scoreA), scoreB:Number(d.scoreB), shuttle:!!d.shuttle, recordedBy:meId, at:Date.now() };
+  s.sets.push(newSet);
+  pendAdd("set", { sid:s.id, obj:newSet });   // จำไว้กันหาย ถ้าบันทึกชนกับเพื่อนที่บันทึกพร้อมกัน
   if(d.shuttle) s.shuttlesUsed = (Number(s.shuttlesUsed)||0) + 1;
   await storeSave();
   setDraft = { court:d.court, teamA:[], teamB:[], scoreA:"", scoreB:"", shuttle:false };
@@ -1987,7 +2173,7 @@ function renderEditSetModal(){
     const m = mem(id); if(!m) return "";
     const arr = team==="A"? d.teamA : d.teamB;
     const cls = arr.includes(id)? (team==="A"?"pa":"pb"):"";
-    return `<span class="chip ${cls}" onclick="pickEditSetTeam('${team}','${id}')"><span class="av">${m.emoji}</span>${esc(m.name)}</span>`;
+    return `<span class="chip ${cls}" onclick="pickEditSetTeam('${team}','${id}')"><span class="av">${m.emoji}</span>${esc(m.name)}${proMark(m.id)}</span>`;
   }).join("");
   const courtSet = [...new Set([...(s.courts||[]).map(c=>String(c.no)), String(d.court)])].filter(Boolean);
   const courtOpts = courtSet.map(no=>`<option value="${esc(no)}" ${String(d.court)===String(no)?"selected":""}>คอร์ท ${esc(no)}</option>`).join("");
@@ -2242,7 +2428,9 @@ async function sendFeedback(){
   const t = $("fbText").value.trim();
   if(!t) return toast("พิมพ์ข้อความก่อนนะ", true);
   if(!db.feedback) db.feedback = [];
-  db.feedback.push({ id:uid(), from:meId, text:t, at:Date.now() });
+  const fb = { id:uid(), from:meId, text:t, at:Date.now() };
+  db.feedback.push(fb);
+  pendAdd("feedback", fb);
   await storeSave(); closeModal(); renderAll();
   toast("📨 ส่งความคิดเห็นถึง Admin แล้ว ขอบคุณครับ 🙏");
 }
@@ -2892,9 +3080,9 @@ async function handlePayQRFile(inp){
   const f = inp.files && inp.files[0]; if(!f) return;
   toast("กำลังเตรียมรูป QR…");
   try{
-    let dataUrl = await compressImage(f, 600, 0.8);
-    if(dataUrl.length > 300000) dataUrl = await compressImage(f, 450, 0.7);
-    if(dataUrl.length > 300000) return toast("รูปใหญ่เกินไป — ลองครอปเฉพาะส่วน QR", true);
+    let dataUrl = await compressImage(f, 520, 0.72);
+    if(dataUrl.length > 150000) dataUrl = await compressImage(f, 430, 0.6);
+    if(dataUrl.length > 200000) return toast("รูปใหญ่เกินไป — ลองครอปเฉพาะส่วน QR", true);
     window.__qrDraft = dataUrl;
     const z = $("qrZone");
     if(z) z.innerHTML = `<img src="${dataUrl}" style="width:100%; max-width:220px; display:block; margin:0 auto 8px; border-radius:12px; background:#fff;">`;
@@ -2935,9 +3123,12 @@ async function handleSlipFile(sid, inp, mid){
   toast("กำลังเตรียมรูปสลิป…");
   let dataUrl;
   try{
-    dataUrl = await compressImage(f, 900, 0.62);
-    if(dataUrl.length > 420000) dataUrl = await compressImage(f, 700, 0.5);
-    if(dataUrl.length > 420000) return toast("รูปใหญ่เกินไป — ลองครอปเฉพาะส่วนของสลิป", true);
+    /* บีบรูปให้เล็กลงกว่าเดิมมาก — รูปสลิปคือสาเหตุหลักที่ทำให้ข้อมูลอ้วนและซิงก์ช้า
+       (ยังอ่านยอดเงินและตรวจด้วยตาได้ชัดเจนที่ความกว้าง 760 px) */
+    dataUrl = await compressImage(f, 760, 0.55);
+    if(dataUrl.length > 190000) dataUrl = await compressImage(f, 620, 0.45);
+    if(dataUrl.length > 190000) dataUrl = await compressImage(f, 520, 0.4);
+    if(dataUrl.length > 260000) return toast("รูปใหญ่เกินไป — ลองครอปเฉพาะส่วนของสลิป", true);
   }catch(e){ return toast("อ่านไฟล์รูปไม่สำเร็จ ลองรูปอื่น", true); }
   const owed = payAmt(s, mid);
   window.__slipDraft = { sid, mid, dataUrl, amountRead:null, matched:false };
@@ -2976,6 +3167,7 @@ async function submitSlip(){
   const mid = d.mid || meId;
   const note = (($("slipNoteInp")||{}).value||"").trim().slice(0,80);
   s.payReq[mid] = { method:"slip", slip:d.dataUrl, amountRead:d.amountRead, matched:!!d.matched, at:Date.now(), by:meId, note };
+  pendAdd("payreq", { sid:s.id, mid, obj:s.payReq[mid] });
   const sid = d.sid;
   window.__slipDraft = null;
   await storeSave(); closeModal(); renderAll(); openPayment(sid);
@@ -3009,6 +3201,7 @@ async function payCash(sid, mid){
   if(!confirm(who+money(owed)+" ให้ผู้จัดการแล้ว?\nผู้จัดการจะกดยืนยันอีกครั้ง")) return;
   if(!s.payReq) s.payReq = {};
   s.payReq[mid] = { method:"cash", at:Date.now(), by:meId };
+  pendAdd("payreq", { sid:s.id, mid, obj:s.payReq[mid] });
   await storeSave(); renderAll(); openPayment(sid);
   toast("💵 แจ้งจ่ายเงินสดแล้ว — รอผู้จัดการอนุมัติ");
 }
@@ -3283,7 +3476,8 @@ function renderMembers(){
       ${rows}
       <div style="height:12px;"></div>
       <button class="btn btn-lime btn-block" onclick="openAddMember()">+ เพิ่มสมาชิกใหม่</button>
-    </div>`;
+    </div>
+    ${mainMenu()}`;
 }
 function openAddMember(){
   window.__selEmoji = EMOJIS[Math.floor(db.members.length % EMOJIS.length)];
@@ -3454,6 +3648,15 @@ function proBadge(id){
   const t = lv.lv==="รอประเมิน" ? "–" : lv.lv;
   return ` <span class="pro-badge">Pro(${t})</span>`;
 }
+/* เครื่องหมาย Pro แบบกะทัดรัดสำหรับใช้ในชิปเลือกผู้เล่น (หน้าจับคู่ตี/บันทึกเซ็ต)
+   — ⚡ พร้อมระดับมือ S/N/P ช่วยให้เลือกคู่ตีที่สูสีกันได้เร็วขึ้น */
+function proMark(id){
+  const m = mem(id);
+  if(!m || !m.pro) return "";
+  const lv = handLevel(eloCached()[id]);
+  return ` <span class="chip-pro">⚡${lv.lv==="รอประเมิน"? "–" : lv.lv}</span>`;
+}
+
 /* ---------- วงจร Turn Pro: ขอ → Admin อนุมัติ → เข้าโหมด Pro / ออกเอง / Admin เอาออก ---------- */
 function proPending(){ return db.members.filter(m=>m.proReq && !m.pro); }
 function openTurnPro(){
@@ -3650,7 +3853,8 @@ function renderRank(){
       <p class="muted" style="margin:8px 0 0; font-size:11px;">ดู Best Partner ของตัวเอง: แตะชื่อในอันดับด้านบน → ตาราง "สถิติกับคู่หู"</p>
     </div>`:""}
     ${regCard}
-    ${never.length? `<div class="card"><h3>🌱 ยังไม่มีสถิติ</h3><div class="chips">${never.map(x=>`<span class="chip" style="cursor:default;"><span class="av">${x.emoji}</span>${esc(x.name)}</span>`).join("")}</div></div>`:""}`;
+    ${never.length? `<div class="card"><h3>🌱 ยังไม่มีสถิติ</h3><div class="chips">${never.map(x=>`<span class="chip" style="cursor:default;"><span class="av">${x.emoji}</span>${esc(x.name)}</span>`).join("")}</div></div>`:""}
+    ${mainMenu()}`;
 }
 
 /* ---------- สถิติรายคน: ตีกับใคร แพ้ชนะกี่แต้ม ---------- */
@@ -3754,7 +3958,15 @@ function renderPro(){
                   : db.members.filter(x=> x.pro || (E[x.id]&&E[x.id].sets>0));
   window.__proPick = (window.__proPick||[]).filter(id=> pool.some(p=>p.id===id));
   const pick = window.__proPick;
-  const chips = pool.map(p=>`<span class="chip ${pick.includes(p.id)?"on":""}" onclick="proPickToggle('${p.id}')"><span class="av">${p.emoji}</span>${esc(p.name)}</span>`).join("");
+  /* เรียงจากแต้มมือมากไปน้อย — คนที่แต้มใกล้กันจะอยู่ติดกัน เลือกคู่สูสีได้เร็วขึ้น */
+  const chips = [...pool].sort((a,b)=> ((E[b.id]||{r:ELO_START}).r) - ((E[a.id]||{r:ELO_START}).r)).map(p=>{
+    const e = E[p.id] || {r:ELO_START, sets:0};
+    const plv = handLevel(e);
+    const mark = p.pro
+      ? `<span class="chip-pro">⚡${plv.lv==="รอประเมิน"? "–" : plv.lv}</span><span class="chip-el" style="color:${plv.color};">${e.r}</span>`
+      : `<span class="chip-el">${e.sets? e.r : "–"}</span>`;
+    return `<span class="chip ${pick.includes(p.id)?"on":""}" onclick="proPickToggle('${p.id}')"><span class="av">${p.emoji}</span>${esc(p.name)}${mark}</span>`;
+  }).join("");
 
   // คิวแฟร์: นัดกำลังตี — ใครตีน้อยสุดควรได้ลงก่อน
   let queueCard = "";
@@ -3797,6 +4009,7 @@ function renderPro(){
 
     <div class="card">
       <h3>🎲 จัดทีมให้สูสี <span class="muted" style="font-weight:400; font-size:11px;">(เลือก 4 คน)</span></h3>
+      <p class="muted" style="margin:0 0 8px; font-size:11.5px;"><span class="chip-pro">⚡S/N/P</span> = สมาชิก Pro พร้อมระดับมือ • ตัวเลขคือแต้มมือ เรียงจากมากไปน้อย — เลือกคนที่แต้มใกล้กันจะได้คู่ที่สูสี</p>
       <div class="chips">${chips || '<span class="muted">ยังไม่มีผู้เล่นให้เลือก</span>'}</div>
       <div id="proSuggest" style="margin-top:10px;"></div>
       <button class="btn btn-lime btn-block" style="margin-top:10px;" onclick="suggestTeams()">🎲 จัดทีมจาก ${pick.length} คนที่เลือก</button>
@@ -3812,7 +4025,8 @@ function renderPro(){
       • เซ็ตคู่ใช้ค่าเฉลี่ยของทีม แล้วแบ่งแต้มให้ทั้งคู่เท่ากัน<br>
       • ระดับมือ: <b style="color:var(--amber);">S</b> &lt; ${LV_N} ≤ <b style="color:var(--blue);">N</b> &lt; ${LV_P} ≤ <b style="color:var(--lime);">P</b> — เลื่อนขั้น/ลดขั้นอัตโนมัติตามแต้มมือ (ต้องตีครบ ${LV_MIN_SETS} เซ็ตก่อนจึงจัดระดับ)<br>
       • แต้มมือคำนวณจากเซ็ตที่บันทึกในแอปเท่านั้น และแสดงเฉพาะสมาชิก Pro ด้วยกัน</p>
-    </div>`;
+    </div>
+    ${mainMenu()}`;
 }
 function proPickToggle(id){
   window.__proPick = window.__proPick||[];
@@ -3839,8 +4053,9 @@ function suggestTeams(){
   const ra=(r(best[0][0])+r(best[0][1]))/2, rb=(r(best[1][0])+r(best[1][1]))/2;
   const pa = Math.round(100/(1+Math.pow(10,(rb-ra)/400)));
   const el = $("proSuggest");
+  const tLab = ids => ids.map(id=>emojiOf(id)+" "+esc(nameOf(id))+proMark(id)).join(" + ");
   if(el) el.innerHTML = `<div class="court-reco" style="display:block;">
-    <div style="text-align:center; font-weight:800; font-family:'Prompt',sans-serif;">${teamLabel(best[0])}<br><span style="color:var(--lime);">VS</span><br>${teamLabel(best[1])}</div>
+    <div style="text-align:center; font-weight:800; font-family:'Prompt',sans-serif;">${tLab(best[0])} <span class="chip-el">เฉลี่ย ${Math.round(ra)}</span><br><span style="color:var(--lime);">VS</span><br>${tLab(best[1])} <span class="chip-el">เฉลี่ย ${Math.round(rb)}</span></div>
     <div class="muted" style="text-align:center; margin-top:6px; font-size:12px;">โอกาสชนะ ${pa}% : ${100-pa}% — ${bestGap<15?"สูสีมาก! 🔥": bestGap<40?"สูสีกำลังดี":"ต่างกันพอสมควร แต่นี่คือแบบที่สูสีที่สุดแล้ว"}</div>
   </div>`;
   translateDom($("v-pro"));
@@ -3869,7 +4084,7 @@ function renderHistory(){
       </div>`:""}
     </div>`;
   }).join("");
-  v.innerHTML = `${backBar()}${turnProBtn()}<div class="card"><h3>🗂️ ประวัตินัดที่จบแล้ว</h3>${rows || '<div class="empty"><div class="big">🗂️</div>ยังไม่มีนัดที่จบ</div>'}</div>`;
+  v.innerHTML = `${backBar()}${turnProBtn()}<div class="card"><h3>🗂️ ประวัตินัดที่จบแล้ว</h3>${rows || '<div class="empty"><div class="big">🗂️</div>ยังไม่มีนัดที่จบ</div>'}</div>${mainMenu()}`;
 }
 /* ลบนัดที่จบแล้วออกจากประวัติ (Admin/ผู้จัดการ) — ยืนยัน 2 ชั้นเพราะสถิติและค่าใช้จ่ายของนัดจะหายทั้งหมด */
 async function delDoneSession(sid){
@@ -3885,45 +4100,52 @@ async function delDoneSession(sid){
    AUTO REFRESH (ดึงข้อมูลที่เพื่อนแก้มาอัปเดต)
    ===================================================== */
 /* ---------- polling ปรับตามบริบท ----------
-   • นัดสถานะ "กำลังตี" → ทุก 5 วิ (ช่วงที่หลายคนบันทึกเซ็ตพร้อมกัน ต้องสด)
-   • ปกติ → ทุก 15 วิ
-   • แอปถูกพับ/สลับแท็บ → หยุดดึงข้อมูล (ประหยัดแบตและโควตา) แล้วดึงทันทีเมื่อเปิดกลับมา */
-let __pollTimer = null;
+   • นัดสถานะ "กำลังตี" → ทุก 6 วิ (ช่วงที่หลายคนบันทึกเซ็ตพร้อมกัน ต้องสด)
+   • ปกติ → ทุก 20 วิ
+   • เชื่อมต่อไม่ได้ → ถอยห่างขึ้นเรื่อยๆ สูงสุด 60 วิ (ไม่กระหน่ำยิงจนโดนจำกัดโควตา)
+   • แอปถูกพับ/สลับแท็บ → หยุดดึงข้อมูล แล้วดึงทันทีเมื่อเปิดกลับมา
+   • มีหน้าต่าง (popup) เปิดอยู่ → ยังดึงข้อมูลตามปกติ แต่พักการสลับข้อมูลไว้ก่อน
+     เพื่อไม่ให้จอเปลี่ยนกลางคันขณะกรอกฟอร์ม แล้วค่อยอัปเดตให้ตอนปิดหน้าต่าง */
+let __pollTimer = null, __pollFail = 0, __pendingRemote = null;
+function pollDelay(){
+  if(__pollFail) return Math.min(60000, 8000 * Math.pow(2, Math.min(3, __pollFail)));
+  const playing = db && db.sessions && db.sessions.some(x=>x.status==="playing");
+  return playing? 6000 : 20000;
+}
 function schedulePoll(){
   clearTimeout(__pollTimer);
   if(document.hidden) return;
-  const playing = db && db.sessions && db.sessions.some(x=>x.status==="playing");
-  __pollTimer = setTimeout(async ()=>{ await pollRemote(); schedulePoll(); }, playing? 5000 : 15000);
+  __pollTimer = setTimeout(async ()=>{ await pollRemote(); schedulePoll(); }, pollDelay());
 }
 document.addEventListener("visibilitychange", ()=>{
   if(document.hidden){ clearTimeout(__pollTimer); }
   else { pollRemote(); schedulePoll(); }
 });
+/* รับข้อมูลชุดใหม่จากส่วนกลางมาใช้ พร้อมเติมรายการของเราที่ยังไม่ขึ้นฐานกลางกลับเข้าไป */
+function applyRemote(remote){
+  if(!remote || (remote.rev||0) <= (db.rev||0)) return;
+  db = remote;
+  const n = pendReapply();
+  lastRaw = JSON.stringify(db); cacheSave();
+  if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return; }
+  if(n) storeSave();               // ของเราหายไปตอนชน — ส่งกลับขึ้นไปใหม่
+  if(meId) renderAll(); else renderLogin();
+}
 async function pollRemote(){
-  if(modalOpen()) return;
-  if(gasUrl() && !clubKey()) return;   // ยังไม่ผ่านรหัสก๊วน — ไม่ดึงข้อมูล
+  if(!gasUrl()) return;                // ไม่มีฐานกลาง — ไม่มีอะไรให้ดึง
+  if(!clubKey()) return;               // ยังไม่ผ่านรหัสก๊วน
+  if(__saving) return;                 // กำลังบันทึกอยู่ — รอให้จบก่อน กันข้อมูลชนกันเอง
   try{
-    if(gasUrl()){
-      const remote = await gasLoad();
-      if(remote && (remote.rev||0) > (db.rev||0)){
-        db = remote;
-        if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return; }
-        if(meId) renderAll(); else renderLogin();
-      }
-      updateSyncBadge();
-      return;
+    await flushPending();              // มีของค้างในเครื่อง → ส่งขึ้นก่อน
+    const remote = await gasLoad();
+    if(!remote){ if(!gasOK) __pollFail++; updateSyncBadge(); return; }
+    __pollFail = 0;
+    if((remote.rev||0) > (db.rev||0)){
+      if(modalOpen()) __pendingRemote = remote;
+      else applyRemote(remote);
     }
-    if(!storageOK) return;
-    const r = await window.storage.get(KEY, true);
-    if(r && r.value && r.value!==lastRaw){
-      const incoming = JSON.parse(r.value);
-      if((incoming.rev||0) >= (db.rev||0)){
-        lastRaw = r.value; db = incoming;
-        if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return; }
-        if(meId) renderAll(); else renderLogin();
-      }
-    }
-  }catch(e){}
+    updateSyncBadge();
+  }catch(e){ __pollFail++; }
 }
 
 /* =====================================================
@@ -3940,24 +4162,26 @@ async function init(){
     return;
   }
   renderLogin();
-  // 1) Google Sheet (ถ้ารู้ URL จากไฟล์/ลิงก์) → 2) Claude storage → 3) เริ่มใหม่
-  let loaded = null;
-  if(gasUrl()) loaded = await gasLoad();
-  if(!loaded){
-    const cs = await claudeLoad();
-    if(cs){
-      loaded = cs;
-      // ถ้าเคยตั้ง Google Sheet Sync ไว้ (เก็บใน settings) — สลับไปใช้ชีตเป็นหลัก
-      if(!window.__gasOverride && !GAS_URL && cs.settings && cs.settings.gasUrl){
-        window.__gasOverride = cs.settings.gasUrl;
-        const g = await gasLoad();
-        if(g && (g.rev||0) >= (cs.rev||0)) loaded = g;
-      }
+  pendLoad();
+  // 1) สำเนาในเครื่อง (เร็วที่สุด — ไม่ต้องรอเน็ต) → 2) Google Sheet → 3) เริ่มใหม่
+  const cached = cacheLoad();
+  let loaded = cached;
+  if(gasUrl()){
+    const remote = await gasLoad();
+    if(remote){
+      // ถ้าในเครื่องใหม่กว่า แปลว่ามีของค้างส่งอยู่ — ใช้ของในเครื่องแล้วส่งขึ้นให้
+      if(cached && (cached.rev||0) > (remote.rev||0)){ loaded = cached; SYNC.pending = true; }
+      else loaded = remote;
+    } else if(cached){
+      SYNC.pending = true;   // เน็ต/ชีตมีปัญหา — ใช้ของในเครื่องไปก่อน แล้วค่อยส่งทีหลัง
     }
   }
   window.__booting = false;
   db = loaded || seedDb();
+  lastRaw = JSON.stringify(db);
   if(!loaded) await storeSave();
+  else if(pruneSlips()) await storeSave();   // ตัดรูปสลิปเก่าออก คุมขนาดข้อมูลให้ซิงก์เร็ว
+  else if(SYNC.pending) flushPending();
   // one-time: ซิงก์รายชื่อสมาชิกชุดใหม่จากที่ Nu ปรับไว้ (ทำครั้งเดียวต่อฐานข้อมูล)
   if((db.nameSyncV||0) < NAME_SYNC_V){
     db.members.forEach(m=>{ if(NAME_SYNC[m.id]) m.name = NAME_SYNC[m.id]; });
