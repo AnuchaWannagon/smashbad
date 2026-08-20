@@ -168,6 +168,10 @@ input.score-in::placeholder{ color:var(--ink-soft); opacity:.35; }
 .brand .b-t{ font-family:'Prompt',sans-serif; font-weight:800; font-size:20px; line-height:1.1; }
 .brand .b-s{ font-size:11.5px; color:var(--ink-soft); }
 .mecap{ display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line); border-radius:999px; padding:5px 12px 5px 6px; cursor:pointer; }
+.mecap .col{ display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0; }
+.mecap .badges{ display:flex; gap:4px; align-items:center; white-space:nowrap; line-height:1; }
+.mecap .badges .tag{ font-size:9px; padding:1px 6px 2px; }
+.mecap .badges .pro-badge{ vertical-align:0; }
 .mecap .av{ width:26px; height:26px; border-radius:50%; background:var(--card2); display:flex; align-items:center; justify-content:center; font-size:14px; }
 .mecap .nm{ font-size:13px; font-weight:700; max-width:88px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .exitbtn{ display:flex; align-items:center; gap:5px; padding:8px 13px; border-radius:999px; background:rgba(255,107,94,.14); border:1px solid rgba(255,107,94,.4); font-size:15px; flex-shrink:0; color:var(--coral); font-weight:800; }
@@ -373,7 +377,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.19e";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.08.20b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -1086,6 +1090,33 @@ const I18N = {
 "💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ":"💰 View estimated fee / pay before leaving",
 "💰 ประเมินค่าตี (นัดยังไม่จบ)":"💰 Fee estimate (session in progress)",
 "💰 การจ่ายเงิน":"💰 Payments",
+"เกี่ยวกับ App":"About",
+"App นี้พัฒนาขึ้นเพื่อใช้เฉพาะกลุ่ม ขอสงวนลิขสิทธิ์การนำไปใช้ต่อโดยไม่ได้รับอนุญาต":"This app was developed for private group use only. Reuse without permission is prohibited.",
+"เวอร์ชัน":"Version",
+"✉️ ติดต่อ / ส่งข้อความ":"✉️ Contact / send a message",
+"ข้อความเห็นเฉพาะ Admin / ผู้จัดการ และผู้ส่งเท่านั้น — โต้ตอบกันได้ในกระทู้":"Messages are visible only to Admin / managers and the sender — replies happen in the thread",
+"ข้อความเห็นเฉพาะ Admin / ผู้จัดการ และผู้ส่งเท่านั้น":"Messages are visible only to Admin / managers and the sender",
+"📥 กล่องข้อความ":"📥 Message inbox",
+"✍️ เริ่มข้อความใหม่":"✍️ New message",
+"✍️ ข้อความถึง Admin / ผู้จัดการ":"✍️ Message to Admin / manager",
+"สอบถาม แจ้งปัญหา หรือเสนอไอเดีย — เห็นเฉพาะ Admin / ผู้จัดการ และตัวคุณเอง":"Ask a question, report an issue, or share an idea — visible only to Admin / managers and you",
+"📨 ส่งข้อความ":"📨 Send message",
+"📨 ส่งข้อความแล้ว":"📨 Message sent",
+"พิมพ์ข้อความตอบกลับ...":"Type a reply...",
+"พิมพ์ข้อความ...":"Type a message...",
+"ตอบกลับใหม่":"New reply",
+"ยังไม่มีข้อความ":"No messages yet",
+"🗑️ ลบกระทู้นี้ (Admin)":"🗑️ Delete this thread (Admin)",
+"ลบกระทู้นี้ทั้งหมด?":"Delete this whole thread?",
+"📷 แนบรูป":"📷 Attach a photo",
+"📷 รูปภาพ":"📷 Photo",
+"รูปจะถูกย่อและเก็บใน Google Drive เหมือนรูปสลิป — ไม่ทำให้แอปช้า":"Photos are compressed and stored in Google Drive like payment slips — the app stays fast",
+"พิมพ์ข้อความหรือแนบรูปก่อนนะ":"Type a message or attach a photo first",
+"กำลังย่อรูป...":"Compressing photo...",
+"กำลังอัปโหลดรูป...":"Uploading photo...",
+"แนบรูปแล้ว — กดส่งข้อความได้เลย":"Photo attached — tap send when ready",
+"อ่านรูปไม่สำเร็จ ลองใหม่อีกครั้ง":"Could not read the photo — please try again",
+"✉️ ข้อความ —":"✉️ Messages —",
 "⏱️ นัดนี้ยังตีอยู่ — ยอดด้านล่างเป็น":"⏱️ This session is still in progress — the amounts below are an ",
 "ยอดประเมิน":"estimate",
 " ถ้ามีเปลี่ยนลูก/แก้ค่าคอร์ทเพิ่ม ยอดของคนที่":". If more shuttles are used or court costs change, amounts for those who ",
@@ -1831,17 +1862,18 @@ function renderAll(){
 function renderMeCap(){
   const m = me(); if(!m) return;
   const roleTag = m.role==="admin" ? '<span class="tag tag-admin">ADMIN</span>' : (isDefaultMgr()? '<span class="tag tag-mgr">ผู้จัดการ</span>':"");
-  $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="nm">${esc(m.name)}</span>${proBadge(m.id)}${roleTag}`;
+  const badges = (proBadge(m.id)+roleTag).trim();
+  $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="col"><span class="nm">${esc(m.name)}</span>${badges? `<span class="badges">${badges}</span>`:""}</span>`;
 }
 
 /* เมนูหลัก — ปุ่มใหญ่ 4 ปุ่ม (รายละเอียดเปิดเป็น popup)
    ใช้ซ้ำท้ายทุกหน้า: นัดตี / สมาชิก / สถิติ / ประวัติ / Pro เพื่อให้กดถึงได้จากทุกที่ */
 function mainMenu(){
-  const fbCount = (db.feedback||[]).length;
+  const fbCount = fbBadgeCount();
   return `<div class="menu-grid">
     <button class="menu-btn" onclick="openPastList()"><span class="mi">🏁</span>สรุปนัดที่ผ่านมา</button>
     <button class="menu-btn" onclick="openPayNow()"><span class="mi">💰</span>จ่ายเงินค่าตี</button>
-    <button class="menu-btn" onclick="openFeedbackMenu()"><span class="mi">💬</span>ความคิดเห็น${isAdmin()&&fbCount? ` (${fbCount})`:""}</button>
+    <button class="menu-btn" onclick="openAbout()"><span class="mi">ℹ️</span>เกี่ยวกับ App${fbCount? ` (${fbCount})`:""}</button>
     <button class="menu-btn" onclick="openManageMenu()"><span class="mi">⚙️</span>จัดการก๊วน</button>
   </div>`;
 }
@@ -1919,17 +1951,7 @@ function openPastList(){
 }
 
 /* ---------- popup: ความคิดเห็น ---------- */
-function openFeedbackMenu(){
-  if(!isAdmin()) return openFeedback();
-  const n = (db.feedback||[]).length;
-  modal(`
-    <div class="modal-head"><h3>💬 ความคิดเห็น</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <button class="btn btn-lime btn-block" onclick="openFeedback()">✍️ ส่งความคิดเห็น</button>
-    <div style="height:10px;"></div>
-    <button class="btn ${n?"btn-blue":"btn-ghost"} btn-block" onclick="openFeedbackList()">📥 กล่องความคิดเห็น (${n})</button>
-    <div style="height:10px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
-}
+/* openFeedbackMenu เดิมถูกแทนด้วย openAbout() — ดูโซน "เกี่ยวกับ App + ข้อความส่วนตัว" */
 
 /* ---------- popup: จัดการก๊วน ---------- */
 function openManageMenu(){
@@ -2159,8 +2181,6 @@ function renderPlayingSession(s){
     ${canManage(s)
       ? `<button class="btn btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800; background:rgba(255,194,75,.14); color:var(--amber); border:1.5px solid rgba(255,194,75,.5); border-radius:12px;" onclick="openFeeEstimate('${s.id}')">💰 ประเมินค่าตี — ปรับค่าคอร์ท/ลูก & เก็บเงินก่อนปิดนัด</button>`
       : (isAtt && totalCost(s)>0 ? `<button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="openFeeEstimate('${s.id}')">💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ</button>`:"")}
-    ${canManage(s)? `<button class="btn btn-blue big-join" onclick="finishSession('${s.id}')">🏁 ขั้นที่ 5: สรุปผล — จบนัดนี้</button>`
-      : `<div class="muted" style="margin-top:12px; text-align:center;">ผู้จัดการนัดจะเป็นคนกด "สรุปผล" เมื่อเลิกตี</div>`}
     ${stageBar(s)}
   </div>
 
@@ -2181,6 +2201,13 @@ function renderPlayingSession(s){
     <h3>📜 เซ็ตทั้งหมด (${totalSets})</h3>
     ${setList}
     ${totalSets? `<div style="height:10px;"></div><button class="btn btn-ghost btn-block" onclick="copyPlayingUpdate('${s.id}')">📋 คัดลอกผลสด → วางในไลน์กลุ่ม</button>`:""}
+  </div>
+
+  <div class="card">
+    <h3>🏁 ขั้นที่ 5: สรุปผล</h3>
+    <p class="muted" style="margin-top:0;">ตรวจผลเซ็ตด้านบนให้ครบก่อน — ปิดนัดแล้วระบบจะสรุปสถิติและค่าตีของทุกคน</p>
+    ${canManage(s)? `<button class="btn btn-blue big-join" style="margin-top:0;" onclick="finishSession('${s.id}')">🏁 สรุปผล — จบนัดนี้</button>`
+      : `<div class="muted" style="text-align:center;">ผู้จัดการนัดจะเป็นคนกด "สรุปผล" เมื่อเลิกตี</div>`}
   </div>`;
 }
 
@@ -2510,47 +2537,199 @@ async function saveGas(){
 }
 
 /* ---------- ความคิดเห็นถึง Admin ---------- */
-function openFeedback(){
+/* ---------- ℹ️ เกี่ยวกับ App + ข้อความส่วนตัวถึง Admin/ผู้จัดการ ----------
+   db.feedback เก็บ "ข้อความ" ทีละรายการ: { id, threadId, ownerId, from, text, at }
+   - threadId = id ของข้อความแรกในกระทู้ / ownerId = ผู้เปิดกระทู้ (ติดไปทุกข้อความในกระทู้)
+   - รายการเก่าที่ไม่มี threadId/ownerId ถือเป็นกระทู้ของตัวเอง (threadId=id, ownerId=from)
+   - สิทธิเห็น/ตอบ: Admin, ผู้จัดการค่าเริ่มต้น (isMgrRole) และเจ้าของกระทู้เท่านั้น
+   - เก็บ 1 ข้อความ = 1 record เพื่อให้กลไก pendAdd/pendReapply เดิมใช้ได้โดยไม่ต้องแก้ ---------- */
+function fbThreads(){
+  const th = {};
+  (db.feedback||[]).forEach(f=>{ const tid = f.threadId || f.id; (th[tid] = th[tid] || []).push(f); });
+  return Object.keys(th).map(tid=>{
+    const arr = th[tid].sort((a,b)=>(a.at||0)-(b.at||0));
+    return { tid, owner: arr[0].ownerId || arr[0].from, msgs: arr, last: arr[arr.length-1] };
+  }).sort((a,b)=>(b.last.at||0)-(a.last.at||0));
+}
+function fbCanSee(t){ return isMgrRole(meId) || t.owner===meId; }
+function fbMyThreads(){ return fbThreads().filter(fbCanSee); }
+/* จำนวนกระทู้ "มีข้อความใหม่รอฝั่งเรา" — ผู้จัดการ: ข้อความล่าสุดมาจากสมาชิก / สมาชิก: ข้อความล่าสุดมาจากผู้จัดการ */
+function fbBadgeCount(){
+  if(!meId || !me()) return 0;
+  return fbMyThreads().filter(t=> isMgrRole(meId) ? !isMgrRole(t.last.from) : isMgrRole(t.last.from)).length;
+}
+function fbTs(at){ return at? new Date(at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""; }
+
+/* ---------- 📷 รูปแนบในข้อความ — ใช้ท่าเดียวกับสลิป: ย่อรูป → อัปโหลดขึ้น Google Drive
+   เก็บเฉพาะลิงก์ (imgUrl/imgId) ในฐานข้อมูล เพื่อไม่ให้ฐานข้อมูลบวมจนแอปช้า
+   ถ้าตัวอัปโหลด Drive ยังไม่ติดตั้ง/ล่ม → fallback ฝังรูปแบบย่อพิเศษเหมือนสลิป ---------- */
+let msgImgDraft = null;
+function msgImgSrc(f){ return (f && (f.imgUrl || f.img)) || ""; }
+function attachMsgImage(){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = async ()=>{
+    const f = inp.files && inp.files[0]; if(!f) return;
+    toast("กำลังย่อรูป...");
+    try{
+      let d = await compressImage(f, 760, 0.6);
+      if(d.length > 190000) d = await compressImage(f, 560, 0.5);
+      if(d.length > 190000) d = await compressImage(f, 430, 0.4);
+      msgImgDraft = d;
+      renderMsgImgPreview();
+      toast("แนบรูปแล้ว — กดส่งข้อความได้เลย");
+    }catch(e){ toast("อ่านรูปไม่สำเร็จ ลองใหม่อีกครั้ง", true); }
+  };
+  inp.click();
+}
+function clearMsgImg(){ msgImgDraft = null; renderMsgImgPreview(); }
+function renderMsgImgPreview(){
+  const el = $("msgImgPrev"); if(!el) return;
+  el.innerHTML = msgImgDraft? `<div style="position:relative; display:inline-block; margin:8px 0 4px;">
+      <img src="${msgImgDraft}" style="max-width:150px; max-height:150px; border-radius:10px; border:1px solid var(--line);">
+      <button class="mclose" style="position:absolute; top:-9px; right:-9px;" onclick="clearMsgImg()">✕</button>
+    </div>` : "";
+}
+/* ย่อ dataUrl ซ้ำอีกรอบ (ใช้ตอน fallback ฝังในฐานข้อมูล ให้เล็กที่สุด) */
+function shrinkDataUrl(dataUrl, maxW, q){
+  return new Promise((res)=>{
+    const img = new Image();
+    img.onload = ()=>{ try{
+      const sc = Math.min(1, maxW/img.width);
+      const cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(img.width*sc));
+      cv.height = Math.max(1, Math.round(img.height*sc));
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      res(cv.toDataURL("image/jpeg", q));
+    }catch(e){ res(dataUrl); } };
+    img.onerror = ()=> res(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function openAbout(){
+  const admins = db.members.filter(m=>m.role==="admin");
+  const dm = mem(db.settings.defaultManagerId);
+  const bad = fbBadgeCount();
   modal(`
-    <div class="modal-head"><h3>💬 ส่งความคิดเห็นถึง Admin</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0;">ข้อเสนอแนะการใช้งาน สิ่งที่อยากให้แก้ไข หรือไอเดียพัฒนา App — ส่งตรงถึง Nu (Admin)</p>
-    <div class="field"><label>ข้อความของคุณ</label><textarea id="fbText" rows="4" placeholder="เช่น อยากให้เพิ่ม... / เจอปัญหาตรงที่..."></textarea></div>
-    <button class="btn btn-lime btn-block" onclick="sendFeedback()">📨 ส่งถึง Admin</button>
-    <div style="height:8px;"></div>
+    <div class="modal-head"><h3>ℹ️ เกี่ยวกับ App</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div style="background:var(--card2); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:14px;">
+      <div style="font-weight:800; font-size:15px;">🏸 Smash Badminton Club</div>
+      <div class="muted" style="font-size:12px; margin:2px 0 8px;">เวอร์ชัน ${APP_VER}</div>
+      <div style="font-size:13px; line-height:1.65;">App นี้พัฒนาขึ้นเพื่อใช้เฉพาะกลุ่ม ขอสงวนลิขสิทธิ์การนำไปใช้ต่อโดยไม่ได้รับอนุญาต</div>
+    </div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">Admin</span><span style="font-weight:700;">${admins.map(a=>a.emoji+" "+esc(a.name)).join(", ")||"-"}</span></div>
+    <div class="row" style="margin-bottom:12px;"><span class="muted">ผู้จัดการ</span><span style="font-weight:700;">${dm? dm.emoji+" "+esc(dm.name):"-"}</span></div>
+    <button class="btn btn-lime btn-block" onclick="openMsgBox()">✉️ ติดต่อ / ส่งข้อความ${bad? ` (${bad})`:""}</button>
+    <p class="muted" style="font-size:11.5px; text-align:center; margin:8px 0 10px;">ข้อความเห็นเฉพาะ Admin / ผู้จัดการ และผู้ส่งเท่านั้น — โต้ตอบกันได้ในกระทู้</p>
     <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
 }
-async function sendFeedback(){
-  const t = $("fbText").value.trim();
-  if(!t) return toast("พิมพ์ข้อความก่อนนะ", true);
-  if(!db.feedback) db.feedback = [];
-  const fb = { id:uid(), from:meId, text:t, at:Date.now() };
-  db.feedback.push(fb);
-  pendAdd("feedback", fb);
-  await storeSave(); closeModal(); renderAll();
-  toast("📨 ส่งความคิดเห็นถึง Admin แล้ว ขอบคุณครับ 🙏");
-}
-function openFeedbackList(){
-  if(!isAdmin()) return;
-  const list = [...(db.feedback||[])].sort((a,b)=> (b.at||0)-(a.at||0));
-  const rows = list.map(f=>`
-    <div class="set-card">
-      <div style="font-size:13.5px;">${esc(f.text)}</div>
-      <div class="set-meta" style="text-align:left; display:flex; justify-content:space-between; align-items:center;">
-        <span>${emojiOf(f.from)} ${esc(nameOf(f.from))} • ${f.at? new Date(f.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</span>
-        <span style="color:var(--coral); cursor:pointer; font-weight:700;" onclick="delFeedback('${f.id}')">✕ ลบ</span>
+
+function openMsgBox(){
+  const ths = fbMyThreads();
+  const rows = ths.map(t=>{
+    const hasImg = !!msgImgSrc(t.last);
+    const preview = (t.last.text? (t.last.text.length>64? t.last.text.slice(0,64)+"…" : t.last.text) : "") + (hasImg? (t.last.text? " 📷":"📷 รูปภาพ") : "");
+    const waiting = isMgrRole(meId) ? !isMgrRole(t.last.from) : isMgrRole(t.last.from);
+    return `<div class="set-card" style="cursor:pointer;" onclick="openMsgThread('${t.tid}')">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:700; font-size:13.5px;">${emojiOf(t.owner)} ${esc(nameOf(t.owner))}</span>
+        ${waiting? '<span class="tag tag-play" style="font-size:10px; padding:2px 8px;">ตอบกลับใหม่</span>':""}
       </div>
-    </div>`).join("");
+      <div class="muted" style="font-size:12.5px; margin-top:3px;">${emojiOf(t.last.from)} ${esc(preview)}</div>
+      <div class="muted" style="font-size:10.5px; text-align:right;">${fbTs(t.last.at)} • ${t.msgs.length} ข้อความ</div>
+    </div>`;
+  }).join("");
   modal(`
-    <div class="modal-head"><h3>📥 กล่องความคิดเห็น (${list.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    ${rows || '<div class="empty"><div class="big">📭</div>ยังไม่มีความคิดเห็นเข้ามา</div>'}
-    <div style="height:12px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    <div class="modal-head"><h3>📥 กล่องข้อความ (${ths.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0; font-size:12px;">ข้อความเห็นเฉพาะ Admin / ผู้จัดการ และผู้ส่งเท่านั้น</p>
+    <button class="btn btn-lime btn-block" style="margin-bottom:12px;" onclick="openMsgCompose()">✍️ เริ่มข้อความใหม่</button>
+    ${rows || '<div class="empty"><div class="big">📭</div>ยังไม่มีข้อความ</div>'}
+    <div style="height:10px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openAbout()">◀️ ย้อนกลับ</button>`);
 }
-async function delFeedback(id){
+
+function openMsgCompose(){
+  msgImgDraft = null;
+  modal(`
+    <div class="modal-head"><h3>✍️ ข้อความถึง Admin / ผู้จัดการ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="margin-top:0;">สอบถาม แจ้งปัญหา หรือเสนอไอเดีย — เห็นเฉพาะ Admin / ผู้จัดการ และตัวคุณเอง</p>
+    <div class="field"><label>ข้อความของคุณ</label><textarea id="msgText" rows="4" placeholder="พิมพ์ข้อความ..."></textarea></div>
+    <button class="btn btn-ghost btn-sm" onclick="attachMsgImage()">📷 แนบรูป</button>
+    <div id="msgImgPrev"></div>
+    <p class="muted" style="font-size:11px; margin:6px 0 10px;">รูปจะถูกย่อและเก็บใน Google Drive เหมือนรูปสลิป — ไม่ทำให้แอปช้า</p>
+    <button class="btn btn-lime btn-block" onclick="sendMsg(null)">📨 ส่งข้อความ</button>
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openMsgBox()">◀️ ย้อนกลับ</button>`);
+}
+
+function openMsgThread(tid){
+  const t = fbThreads().find(x=>x.tid===tid);
+  if(!t || !fbCanSee(t)) return;
+  msgImgDraft = null;
+  const bubbles = t.msgs.map(f=>{
+    const mine = f.from===meId;
+    const mgrSide = isMgrRole(f.from);
+    const who = mgrSide? ((mem(f.from)||{}).role==="admin"? " (Admin)":" (ผู้จัดการ)") : "";
+    const src = msgImgSrc(f);
+    const imgHtml = src? `<a href="${f.imgUrl||"javascript:void(0)"}" ${f.imgUrl?'target="_blank" rel="noopener"':""}><img src="${src}" style="max-width:100%; max-height:280px; border-radius:10px; margin-top:6px; border:1px solid var(--line); display:block;" loading="lazy"></a>`:"";
+    return `<div style="display:flex; ${mine?"justify-content:flex-end;":""} margin-bottom:8px;">
+      <div style="max-width:86%; background:${mine?"rgba(198,242,78,.10)":"var(--card2)"}; border:1px solid ${mine?"rgba(198,242,78,.35)":"var(--line)"}; border-radius:13px; padding:8px 12px;">
+        <div style="font-size:11.5px; font-weight:800; color:${mgrSide?"var(--amber)":"var(--blue)"}; margin-bottom:2px;">${emojiOf(f.from)} ${esc(nameOf(f.from))}${who}</div>
+        ${f.text? `<div style="font-size:13.5px; white-space:pre-wrap; line-height:1.55;">${esc(f.text)}</div>`:""}
+        ${imgHtml}
+        <div class="muted" style="font-size:10px; text-align:right; margin-top:3px;">${fbTs(f.at)}</div>
+      </div></div>`;
+  }).join("");
+  modal(`
+    <div class="modal-head"><h3>✉️ ข้อความ — ${emojiOf(t.owner)} ${esc(nameOf(t.owner))}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    ${bubbles}
+    <div class="divider"></div>
+    <div class="field"><textarea id="msgText" rows="3" placeholder="พิมพ์ข้อความตอบกลับ..."></textarea></div>
+    <button class="btn btn-ghost btn-sm" onclick="attachMsgImage()">📷 แนบรูป</button>
+    <div id="msgImgPrev"></div>
+    <div style="height:6px;"></div>
+    <button class="btn btn-lime btn-block" onclick="sendMsg('${tid}')">📨 ส่งข้อความ</button>
+    ${isAdmin()? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" style="color:var(--coral);" onclick="delThread('${tid}')">🗑️ ลบกระทู้นี้ (Admin)</button>`:""}
+    <div style="height:8px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openMsgBox()">◀️ ย้อนกลับ</button>`);
+}
+
+async function sendMsg(tid){
+  const txt = $("msgText").value.trim();
+  if(!txt && !msgImgDraft) return toast("พิมพ์ข้อความหรือแนบรูปก่อนนะ", true);
+  if(!db.feedback) db.feedback = [];
+  let ownerId = meId, threadId = null;
+  if(tid){
+    const th = fbThreads().find(x=>x.tid===tid);
+    if(!th || !fbCanSee(th)) return;
+    ownerId = th.owner; threadId = tid;
+  }
+  const msg = { id:uid(), threadId:threadId, ownerId, from:meId, text:txt, at:Date.now() };
+  if(!msg.threadId) msg.threadId = msg.id;
+  if(msgImgDraft){
+    toast("กำลังอัปโหลดรูป...");
+    const up = await uploadSlipToDrive(msgImgDraft, "msg-"+nameOf(meId));   // ใช้ตัวอัปโหลดเดียวกับสลิป
+    if(up){ msg.imgUrl = up.slipUrl; msg.imgId = up.slipId; }
+    else {
+      let d = msgImgDraft;   // Drive ไม่พร้อม → ฝังแบบย่อพิเศษ (เหมือน fallback ของสลิป)
+      if(d.length > 120000) d = await shrinkDataUrl(d, 430, 0.45);
+      msg.img = d;
+    }
+    msgImgDraft = null;
+  }
+  db.feedback.push(msg);
+  pendAdd("feedback", msg);
+  await storeSave(); renderAll();
+  toast("📨 ส่งข้อความแล้ว");
+  openMsgThread(msg.threadId);
+}
+
+async function delThread(tid){
   if(!isAdmin()) return;
-  if(!confirm("ลบความคิดเห็นนี้?")) return;
-  db.feedback = (db.feedback||[]).filter(f=>f.id!==id);
-  await storeSave(); openFeedbackList(); renderAll();
+  if(!confirm("ลบกระทู้นี้ทั้งหมด?")) return;
+  db.feedback = (db.feedback||[]).filter(f=> (f.threadId||f.id)!==tid);
+  await storeSave(); renderAll(); openMsgBox();
 }
 
 /* ---------- delegate default manager ---------- */
