@@ -379,7 +379,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.22a";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.08.22b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -1089,6 +1089,7 @@ const I18N = {
 "✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก":"✏️ Edit court / shuttle costs",
 "🙋 ลงชื่อร่วมตีแทนเพื่อน / เพิ่ม-ถอนคนตี":"🙋 Sign up a friend / add-remove players",
 "💰 ประเมินค่าตี":"💰 Fee estimate",
+"👇 ตรวจสอบข้อมูลการตีแล้วเข้าสู่ขั้นตอนสรุปผลด้านล่าง":"👇 Review the results, then finish the session at Step 5 below",
 "💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ":"💰 View estimated fee / pay before leaving",
 "💰 ประเมินค่าตี (นัดยังไม่จบ)":"💰 Fee estimate (session in progress)",
 "💰 การจ่ายเงิน":"💰 Payments",
@@ -2201,7 +2202,7 @@ function renderPlayingSession(s){
     ${totalSets? `<div style="height:10px;"></div><button class="btn btn-ghost btn-block" onclick="copyPlayingUpdate('${s.id}')">📋 คัดลอกผลสด → วางในไลน์กลุ่ม</button>`:""}
   </div>
 
-  <div class="card">
+  <div class="card" id="finishCard">
     <h3>🏁 ขั้นที่ 5: สรุปผล</h3>
     <p class="muted" style="margin-top:0;">ตรวจผลเซ็ตด้านบนให้ครบก่อน — ปิดนัดแล้วระบบจะสรุปสถิติและค่าตีของทุกคน</p>
     ${canManage(s)? `<button class="btn btn-blue big-join" style="margin-top:0;" onclick="finishSession('${s.id}')">🏁 สรุปผล — จบนัดนี้</button>`
@@ -2351,18 +2352,18 @@ async function saveEditSet(){
   toast("บันทึกการแก้ไขเซ็ตแล้ว ✏️");
 }
 
-/* ---------- แถบปุ่มประจำขั้นตอน: ย้อนกลับ / ประเมินค่าตี / บันทึก
-   หน้าเริ่มตี (playing): ปุ่ม "ประเมินค่าตี" อยู่กลางระหว่าง ย้อนกลับ กับ บันทึก
-   (ตัดปุ่ม "แก้ไข" เดิมออก — ซ้ำซ้อนกับปุ่ม "เพิ่ม/แก้ไขคอร์ทและจำนวนลูก" ด้านบน)
-   หน้าเปิดนัด (open): คงปุ่ม "แก้ไข" ไว้สำหรับแก้รายละเอียดนัด ---------- */
+/* ---------- แถบปุ่มประจำขั้นตอน: ย้อนกลับ / ประเมินค่าตี (playing) / แก้ไข (open)
+   ปุ่ม "บันทึก" ตัดออกแล้ว — ระบบบันทึกและซิงก์อัตโนมัติทุกการกระทำอยู่แล้ว (storeSave ทุกเหตุการณ์ + flushPending เมื่อเน็ตกลับมา)
+   หน้าเริ่มตี: มีข้อความนำทางใต้แถบปุ่ม แตะแล้วเลื่อนลงไปที่ขั้นตอนสรุปผล (ขั้นที่ 5) ---------- */
 function stageBar(s){
   const mg = canManage(s);
+  if(!mg) return "";
   return `<div class="frow" style="margin-top:12px;">
-    ${mg? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="stepBack('${s.id}')">◀️ ย้อนกลับ</button>`:""}
-    ${mg && s.status==="playing"? `<button class="btn btn-sm" style="flex:1; font-weight:800; background:rgba(255,194,75,.14); color:var(--amber); border:1.5px solid rgba(255,194,75,.5);" onclick="openFeeEstimate('${s.id}')">💰 ประเมินค่าตี</button>`:""}
-    <button class="btn btn-blue btn-sm" style="flex:1;" onclick="manualSave()">💾 บันทึก</button>
-    ${mg && s.status==="open"? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openEditSession('${s.id}')">✏️ แก้ไข</button>`:""}
-  </div>`;
+    <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="stepBack('${s.id}')">◀️ ย้อนกลับ</button>
+    ${s.status==="playing"? `<button class="btn btn-sm" style="flex:1; font-weight:800; background:rgba(255,194,75,.14); color:var(--amber); border:1.5px solid rgba(255,194,75,.5);" onclick="openFeeEstimate('${s.id}')">💰 ประเมินค่าตี</button>`:""}
+    ${s.status==="open"? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openEditSession('${s.id}')">✏️ แก้ไข</button>`:""}
+  </div>
+  ${s.status==="playing"? `<div class="muted" style="text-align:center; font-size:12.5px; margin-top:8px; cursor:pointer;" onclick="var el=document.getElementById('finishCard'); if(el)el.scrollIntoView({behavior:'smooth'});">👇 ตรวจสอบข้อมูลการตีแล้วเข้าสู่ขั้นตอนสรุปผลด้านล่าง</div>`:""}`;
 }
 async function manualSave(){
   await storeSave(); renderAll();
@@ -2804,7 +2805,7 @@ async function finishSession(sid){
   if(!confirm("จบนัดนี้และไปหน้าสรุปผล?")) return;
   s.status = "done"; s.finishedAt = Date.now();
   await storeSave(); renderAll();
-  exportExcel(true);   // บันทึกลงไฟล์ Excel อัตโนมัติเมื่อสรุปผล
+  if(!(gasUrl() && gasOK)) exportExcel(true);   // สำรองไฟล์ Excel อัตโนมัติเฉพาะเมื่อข้อมูลยังไม่ถูกส่งขึ้น Google Sheet (ไม่ได้ตั้งค่า/ซิงก์ไม่สำเร็จ) — ปกติกดส่งออกเองได้ที่เมนูจัดการก๊วน
   openSummary(sid);
 }
 
@@ -2975,6 +2976,9 @@ function renderSummaryHtml(s){
       <div class="statbox"><div class="v">${s.shuttlesUsed||0}</div><div class="l">ลูกที่ใช้</div></div>
     </div>
 
+    <button class="btn btn-lime btn-block" style="margin-bottom:8px;" onclick="openPayment('${s.id}')">💰 หน้าการจ่ายเงิน — รวม ${money(totalCost(s))}</button>
+    ${canMg? `<button class="btn btn-blue btn-block" style="margin-bottom:12px;" onclick="openAdjustPay('${s.id}')">✏️ ถอนชื่อคนไม่ได้มาตี / ปรับยอดรายคน</button>`:`<div style="height:4px;"></div>`}
+
     <div class="card" style="margin-bottom:12px;">
       <h3>📊 สถิติรายคน <span class="muted" style="font-weight:400; font-size:11px;">(เรียงจากชนะมากสุด • ± = แต้มได้−แต้มเสีย)</span></h3>
       <table class="tbl">
@@ -3001,9 +3005,6 @@ function renderSummaryHtml(s){
       }).join("")}
     </div>`:""}
 
-    <button class="btn btn-lime btn-block" onclick="openPayment('${s.id}')">💰 หน้าการจ่ายเงิน — รวม ${money(totalCost(s))}</button>
-    ${canMg? `<div style="height:8px;"></div><button class="btn btn-blue btn-block" onclick="openAdjustPay('${s.id}')">✏️ ถอนชื่อคนไม่ได้มาตี / ปรับยอดรายคน</button>`:""}
-    <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="copySessionSummary('${s.id}')">📋 คัดลอกสรุปผล → วางในไลน์กลุ่ม</button>
     <div style="height:8px;"></div>
     <div class="frow">
