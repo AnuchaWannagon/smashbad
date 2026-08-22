@@ -169,6 +169,8 @@ input.score-in::placeholder{ color:var(--ink-soft); opacity:.35; }
 .brand .b-s{ font-size:11.5px; color:var(--ink-soft); }
 .mecap{ display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line); border-radius:999px; padding:5px 12px 5px 6px; cursor:pointer; }
 .mecap .col{ display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0; }
+.mecap .nmrow{ display:flex; align-items:center; gap:4px; white-space:nowrap; line-height:1; }
+.mecap .nmrow .pro-badge{ vertical-align:0; flex-shrink:0; }
 .mecap .badges{ display:flex; gap:4px; align-items:center; white-space:nowrap; line-height:1; }
 .mecap .badges .tag{ font-size:9px; padding:1px 6px 2px; }
 .mecap .badges .pro-badge{ vertical-align:0; }
@@ -377,7 +379,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.20b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.08.22a";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -1001,7 +1003,7 @@ const I18N = {
 "✏️ แก้ไขการลงชื่อ (ลงชื่อแทน / ถอนชื่อสมาชิก)":"✏️ Edit sign-ups (sign up / withdraw for others)",
 "— แตะชื่อตัวเองเพื่อเขียนข้อความสั้นๆ":"— tap your own name to add a short note",
 "แตะชื่อตัวเองเพื่อเขียนข้อความสั้นๆ":"tap your own name to add a short note",
-"🏟️ เพิ่ม/แก้ไขคอร์ท":"🏟️ Add/edit courts",
+"🏟️ เพิ่ม/แก้ไขคอร์ทและจำนวนลูก":"🏟️ Add/edit courts & shuttles",
 "🙋 เพิ่ม/แก้ไขคนตี":"🙋 Add/edit players",
 "✏️ ปรับยอดจ่ายรายคน / ถอนชื่อคนไม่ได้มาตี":"✏️ Adjust amounts / remove no-shows",
 "✏️ ปรับยอดจ่ายรายคน / ถอนชื่อ":"✏️ Adjust amounts / remove players",
@@ -1086,7 +1088,7 @@ const I18N = {
 "✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก / จำนวนลูกที่ใช้":"✏️ Edit court costs / shuttle price / shuttles used",
 "✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก":"✏️ Edit court / shuttle costs",
 "🙋 ลงชื่อร่วมตีแทนเพื่อน / เพิ่ม-ถอนคนตี":"🙋 Sign up a friend / add-remove players",
-"💰 ประเมินค่าตี — ปรับค่าคอร์ท/ลูก & เก็บเงินก่อนปิดนัด":"💰 Estimate fees — adjust courts/shuttles & collect before closing",
+"💰 ประเมินค่าตี":"💰 Fee estimate",
 "💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ":"💰 View estimated fee / pay before leaving",
 "💰 ประเมินค่าตี (นัดยังไม่จบ)":"💰 Fee estimate (session in progress)",
 "💰 การจ่ายเงิน":"💰 Payments",
@@ -1496,7 +1498,7 @@ function me(){ return mem(meId); }
 function isAdmin(id){ const m = mem(id||meId); return m && m.role==="admin"; }
 function isDefaultMgr(id){ return db.settings.defaultManagerId === (id||meId); }
 function isMgrOf(s,id){ return s.managerId === (id||meId); }
-function canManage(s){ return isAdmin() || isMgrOf(s) ; }
+function canManage(s){ return isAdmin() || isMgrOf(s) || isDefaultMgr(); }   // ผู้จัดการก๊วนที่ได้รับมอบหมาย (defaultManagerId) มีสิทธิ์จัดการนัดเท่า Admin ทุกขั้นตอน 1-5
 /* สิทธิ์แก้ไขเซ็ต: Admin แก้ได้ทุกเซ็ตทุกนัด (รวมนัดที่จบแล้ว) • ผู้จัดการนัด/ผู้บันทึกแก้ได้เฉพาะนัดที่ยังไม่จบ */
 function canEditSet(s, x){
   if(isAdmin()) return true;
@@ -1862,8 +1864,8 @@ function renderAll(){
 function renderMeCap(){
   const m = me(); if(!m) return;
   const roleTag = m.role==="admin" ? '<span class="tag tag-admin">ADMIN</span>' : (isDefaultMgr()? '<span class="tag tag-mgr">ผู้จัดการ</span>':"");
-  const badges = (proBadge(m.id)+roleTag).trim();
-  $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="col"><span class="nm">${esc(m.name)}</span>${badges? `<span class="badges">${badges}</span>`:""}</span>`;
+  // ชื่อ + ป้าย Pro(N) อยู่บรรทัดเดียวกัน • ป้ายบทบาท (ADMIN/ผู้จัดการ) แยกลงบรรทัดที่สอง
+  $("meCap").innerHTML = `<span class="av">${m.emoji}</span><span class="col"><span class="nmrow"><span class="nm">${esc(m.name)}</span>${proBadge(m.id)}</span>${roleTag? `<span class="badges">${roleTag}</span>`:""}</span>`;
 }
 
 /* เมนูหลัก — ปุ่มใหญ่ 4 ปุ่ม (รายละเอียดเปิดเป็น popup)
@@ -2175,12 +2177,8 @@ function renderPlayingSession(s){
     </div>
     <button class="btn btn-lime big-join" onclick="jumpToSetForm()">🏸 บันทึกเซ็ต — ใส่ผลตีรอบนี้</button>
     <button class="btn btn-blue btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800;" onclick="openEditAttendees('${s.id}')">🙋 ลงชื่อร่วมตีแทนเพื่อน / เพิ่ม-ถอนคนตี</button>
-    ${canManage(s)? `<div class="frow" style="margin-top:8px;">
-      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openStartPlay('${s.id}')">🏟️ เพิ่ม/แก้ไขคอร์ท</button>
-    </div>`:""}
-    ${canManage(s)
-      ? `<button class="btn btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800; background:rgba(255,194,75,.14); color:var(--amber); border:1.5px solid rgba(255,194,75,.5); border-radius:12px;" onclick="openFeeEstimate('${s.id}')">💰 ประเมินค่าตี — ปรับค่าคอร์ท/ลูก & เก็บเงินก่อนปิดนัด</button>`
-      : (isAtt && totalCost(s)>0 ? `<button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="openFeeEstimate('${s.id}')">💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ</button>`:"")}
+    ${canManage(s)? `<button class="btn btn-blue btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800;" onclick="openStartPlay('${s.id}')">🏟️ เพิ่ม/แก้ไขคอร์ทและจำนวนลูก</button>`:""}
+    ${!canManage(s) && isAtt && totalCost(s)>0 ? `<button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="openFeeEstimate('${s.id}')">💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ</button>`:""}
     ${stageBar(s)}
   </div>
 
@@ -2353,14 +2351,17 @@ async function saveEditSet(){
   toast("บันทึกการแก้ไขเซ็ตแล้ว ✏️");
 }
 
-/* ---------- แถบปุ่มประจำขั้นตอน: ย้อนกลับ / บันทึก / แก้ไข ---------- */
+/* ---------- แถบปุ่มประจำขั้นตอน: ย้อนกลับ / ประเมินค่าตี / บันทึก
+   หน้าเริ่มตี (playing): ปุ่ม "ประเมินค่าตี" อยู่กลางระหว่าง ย้อนกลับ กับ บันทึก
+   (ตัดปุ่ม "แก้ไข" เดิมออก — ซ้ำซ้อนกับปุ่ม "เพิ่ม/แก้ไขคอร์ทและจำนวนลูก" ด้านบน)
+   หน้าเปิดนัด (open): คงปุ่ม "แก้ไข" ไว้สำหรับแก้รายละเอียดนัด ---------- */
 function stageBar(s){
   const mg = canManage(s);
-  const editFn = s.status==="open" ? `openEditSession('${s.id}')` : `openStartPlay('${s.id}')`;
   return `<div class="frow" style="margin-top:12px;">
     ${mg? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="stepBack('${s.id}')">◀️ ย้อนกลับ</button>`:""}
+    ${mg && s.status==="playing"? `<button class="btn btn-sm" style="flex:1; font-weight:800; background:rgba(255,194,75,.14); color:var(--amber); border:1.5px solid rgba(255,194,75,.5);" onclick="openFeeEstimate('${s.id}')">💰 ประเมินค่าตี</button>`:""}
     <button class="btn btn-blue btn-sm" style="flex:1;" onclick="manualSave()">💾 บันทึก</button>
-    ${mg? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="${editFn}">✏️ แก้ไข</button>`:""}
+    ${mg && s.status==="open"? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openEditSession('${s.id}')">✏️ แก้ไข</button>`:""}
   </div>`;
 }
 async function manualSave(){
@@ -2749,8 +2750,9 @@ async function saveDelegate(){
 }
 
 /* ---------- start play: กรอกข้อมูลคอร์ท ---------- */
-function openStartPlay(sid){
+function openStartPlay(sid, backToPay){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  window.__backToPay = backToPay?1:0;   // เปิดจากหน้าประเมินค่าตี → บันทึกแล้วเด้งกลับหน้าประเมินค่าตี (ไม่ค้างค่าจากรอบก่อน)
   const nc = Math.max(1, courtsNeeded(s.attendees.length));
   const courts = (s.courts&&s.courts.length)? s.courts : Array.from({length:nc},(_,i)=>({no:String(i+1), hours:2, price:DEFAULT_COURT_PRICE}));
   window.__courtDraft = courts.map(c=>({...c}));
@@ -2766,7 +2768,7 @@ function openStartPlay(sid){
     </div>
     <button class="btn btn-blue btn-block" onclick="saveStartPlay('${s.id}')">${s.status==="open"? "💾 บันทึก & เริ่มตี!":"💾 บันทึกข้อมูลคอร์ท"}</button>
     <div style="height:8px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="window.__backToPay=0; closeModal()">◀️ ย้อนกลับ (ไม่บันทึก)</button>`);
+    <button class="btn btn-ghost btn-block" onclick="if(window.__backToPay){window.__backToPay=0; openPayment('${s.id}');}else{closeModal();}">◀️ ย้อนกลับ (ไม่บันทึก)</button>`);
   renderCourtDraft();
 }
 function renderCourtDraft(){
@@ -3133,7 +3135,7 @@ function renderPaymentHtml(s){
     </div>
 
     <div style="height:12px;"></div>
-    ${canMg? `<button class="btn btn-blue btn-block" onclick="window.__backToPay=1; openStartPlay('${s.id}')">✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก / จำนวนลูกที่ใช้</button><div style="height:8px;"></div>`:""}
+    ${canMg? `<button class="btn btn-blue btn-block" onclick="openStartPlay('${s.id}',1)">✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก / จำนวนลูกที่ใช้</button><div style="height:8px;"></div>`:""}
     ${canMg? `<button class="btn btn-blue btn-block" onclick="openAdjustPay('${s.id}')">✏️ ปรับยอดจ่ายรายคน / ถอนชื่อคนไม่ได้มาตี</button><div style="height:8px;"></div>`:""}
     ${canMg? `<button class="btn btn-ghost btn-block" onclick="copyPaySummary('${s.id}')">📋 คัดลอกสรุปค่าใช้จ่าย → วางในไลน์กลุ่ม</button><div style="height:8px;"></div>`:""}
     <button class="btn btn-ghost btn-block" onclick="openPayHistory()">🧾 ประวัติการจ่ายเงินทั้งหมด</button>
