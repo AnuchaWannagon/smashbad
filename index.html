@@ -109,6 +109,9 @@ input.score-in.tb{ border-color:var(--coral); color:var(--coral); }
 input.score-in.ta:focus{ border-color:var(--blue); box-shadow:0 0 0 3px rgba(91,140,255,.28); }
 input.score-in.tb:focus{ border-color:var(--coral); box-shadow:0 0 0 3px rgba(255,107,94,.28); }
 input.score-in::placeholder{ color:var(--ink-soft); opacity:.35; }
+/* ช่องเลือกคอร์ทในฟอร์มบันทึกเซ็ต — เด่นชัดเทียบเท่าช่องใส่คะแนน */
+select.court-sel{ font-size:20px; font-weight:800; text-align:center; padding:12px 8px; border-radius:14px; border:2.5px solid var(--lime); color:var(--lime); background:var(--card2); font-family:'Prompt',sans-serif; }
+select.court-sel:focus{ border-color:var(--lime); box-shadow:0 0 0 3px rgba(198,242,78,.28); }
 /* ตัวบอกว่าแอปกำลังทำงาน (ซิงก์เบื้องหลัง) */
 .spin{ display:inline-block; animation:spinCw 1.4s linear infinite; }
 @keyframes spinCw{ to{ transform:rotate(360deg); } }
@@ -379,7 +382,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.22b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.08.22d";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -1087,7 +1090,7 @@ const I18N = {
 "✏️ แก้ไขการลงชื่อ":"✏️ Edit sign-ups",
 "✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก / จำนวนลูกที่ใช้":"✏️ Edit court costs / shuttle price / shuttles used",
 "✏️ แก้ไขตัวเลขค่าคอร์ท / ค่าลูก":"✏️ Edit court / shuttle costs",
-"🙋 ลงชื่อร่วมตีแทนเพื่อน / เพิ่ม-ถอนคนตี":"🙋 Sign up a friend / add-remove players",
+"🙋 เพิ่ม-ถอน แก้ไขคนร่วมตี":"🙋 Add/remove & edit players",
 "💰 ประเมินค่าตี":"💰 Fee estimate",
 "👇 ตรวจสอบข้อมูลการตีแล้วเข้าสู่ขั้นตอนสรุปผลด้านล่าง":"👇 Review the results, then finish the session at Step 5 below",
 "💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ":"💰 View estimated fee / pay before leaving",
@@ -2177,7 +2180,7 @@ function renderPlayingSession(s){
       <div class="statbox"><div class="v">${totalSets}</div><div class="l">เซ็ตที่ตีแล้ว</div></div>
     </div>
     <button class="btn btn-lime big-join" onclick="jumpToSetForm()">🏸 บันทึกเซ็ต — ใส่ผลตีรอบนี้</button>
-    <button class="btn btn-blue btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800;" onclick="openEditAttendees('${s.id}')">🙋 ลงชื่อร่วมตีแทนเพื่อน / เพิ่ม-ถอนคนตี</button>
+    <button class="btn btn-blue btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800;" onclick="openEditAttendees('${s.id}')">🙋 เพิ่ม-ถอน แก้ไขคนร่วมตี</button>
     ${canManage(s)? `<button class="btn btn-blue btn-block" style="margin-top:8px; padding:14px; font-size:16px; font-weight:800;" onclick="openStartPlay('${s.id}')">🏟️ เพิ่ม/แก้ไขคอร์ทและจำนวนลูก</button>`:""}
     ${!canManage(s) && isAtt && totalCost(s)>0 ? `<button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="openFeeEstimate('${s.id}')">💰 ดูค่าตีโดยประมาณ / จ่ายก่อนกลับ</button>`:""}
     ${stageBar(s)}
@@ -2192,8 +2195,7 @@ function renderPlayingSession(s){
 
   <div class="card" id="setFormCard">
     <h3>✍️ บันทึกเซ็ต <span class="muted" style="font-weight:400;">(สมาชิกที่มาตีช่วยกันบันทึกได้)</span></h3>
-    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:10px;" onclick="openEditAttendees('${s.id}')">✏️ เพิ่ม / แก้ไขคนเข้าตี (ตอนนี้ ${s.attendees.length} คน)</button>
-    ${canRecord ? renderSetForm(s) : `<div class="muted">เฉพาะผู้ที่ลงชื่อเข้าร่วมนัดนี้จึงบันทึกผลได้</div>`}
+    ${canRecord ? renderSetForm(s) : `<div class="muted">เฉพาะผู้ที่ลงชื่อเข้าร่วมนัดนี้จึงบันทึกผลได้</div><button class="btn btn-ghost btn-sm btn-block" style="margin-top:10px;" onclick="openEditAttendees('${s.id}')">✏️ เพิ่ม / แก้ไขคนเข้าตี (ตอนนี้ ${s.attendees.length} คน)</button>`}
   </div>
 
   <div class="card">
@@ -2219,7 +2221,8 @@ function renderSetForm(s){
   }).join("");
   const courtOpts = (s.courts||[]).map(c=>`<option value="${esc(c.no)}" ${String(setDraft.court)===String(c.no)?"selected":""}>คอร์ท ${esc(c.no)}</option>`).join("");
   return `
-    <div class="field"><label class="setlbl">คอร์ทที่เล่น</label><select onchange="setDraft.court=this.value">${courtOpts||'<option value="">-</option>'}</select></div>
+    <div class="field"><label class="setlbl">คอร์ทที่เล่น</label><select class="court-sel" onchange="setDraft.court=this.value">${courtOpts||'<option value="">-</option>'}</select></div>
+    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:10px;" onclick="openEditAttendees('${s.id}')">✏️ เพิ่ม / แก้ไขคนเข้าตี (ตอนนี้ ${s.attendees.length} คน)</button>
     <div class="field"><label class="setlbl ta">ทีม A — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("A")}</div></div>
     <div class="field"><label class="setlbl tb">ทีม B — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("B")}</div></div>
     <div class="frow">
