@@ -382,7 +382,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.22d";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.08.23b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -506,6 +506,10 @@ let gasOK = false;
    สำคัญมาก: ห้ามให้ rev ในเครื่องวิ่งขึ้นเองเวลาบันทึกไม่สำเร็จ
    ไม่งั้นเครื่องที่ออฟไลน์นานจะมี rev สูงกว่าของจริง แล้วไปทับข้อมูลของทั้งก๊วน */
 let serverRev = -1;
+/* rev ล่าสุดที่ "เห็น" บนส่วนกลาง — อาจยังไม่ได้เอาข้อมูลชุดนั้นมาใช้ (เช่น กำลังเปิดหน้าต่างค้างอยู่)
+   ห้ามเอาค่านี้ไปเป็นฐานคำนวณ rev ตอนบันทึก มิฉะนั้นเครื่องที่ถือข้อมูลเก่าจะดัน rev สูงกว่าของจริง
+   แล้วส่งข้อมูลเก่าทั้งก้อนไปทับงานของทั้งก๊วน (ต้นเหตุข้อมูลนัด 21 ส.ค. 2569 หาย) */
+let seenRev = -1;
 
 /* ---------- ตัวชี้วัดการซิงก์ (ไว้วินิจฉัยว่า "ช้า/ไม่สำเร็จ" เกิดจากอะไร) ---------- */
 const SYNC = { lastMs:0, lastAt:0, okAt:0, fails:0, saveFails:0, bytes:0, pending:false, lastErr:"" };
@@ -576,6 +580,25 @@ function pendPresent(p){
       const s = (db.sessions||[]).find(x=>x.id===p.payload.sid);
       return !s || !!(s.payReq && s.payReq[p.payload.mid]) || !!(s.paid && s.paid[p.payload.mid]);
     }
+    /* --- ชั้นข้อมูลระดับนัด: ก่อนหน้านี้ไม่มีคิวกู้คืน จึงหายทุกครั้งที่ข้อมูลชนกัน --- */
+    if(p.kind==="att"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return true;
+      const has = (s.attendees||[]).some(a=>a.memberId===p.payload.mid);
+      return p.payload.op==="add" ? has : !has;
+    }
+    if(p.kind==="court"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid);
+      return !s || (Number(s.courtsAt)||0) >= p.payload.at;
+    }
+    if(p.kind==="status"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid);
+      return !s || (Number(s.statusAt)||0) >= p.payload.at;
+    }
+    if(p.kind==="fee"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return true;
+      const a = (s.attendees||[]).find(x=>x.memberId===p.payload.mid);
+      return !a || (Number(a.feeAt)||0) >= p.payload.at;
+    }
   }catch(e){}
   return true;
 }
@@ -608,6 +631,36 @@ function pendReapply(){
         const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
         if(!s.payReq) s.payReq = {};
         if(!s.payReq[p.payload.mid] && !(s.paid && s.paid[p.payload.mid])){ s.payReq[p.payload.mid] = p.payload.obj; n++; }
+      } else if(p.kind==="att"){
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        if(!s.attendees) s.attendees = [];
+        const i = s.attendees.findIndex(a=>a.memberId===p.payload.mid);
+        if(p.payload.op==="add"){ if(i<0){ s.attendees.push(p.payload.obj); n++; } }
+        else {
+          // ถอนชื่อกลับได้เฉพาะกรณีที่ยังไม่มีผลเซ็ตของคนนี้ในชุดข้อมูลใหม่
+          const used = (s.sets||[]).some(x=> x.teamA.includes(p.payload.mid) || x.teamB.includes(p.payload.mid));
+          if(i>=0 && !used){ s.attendees.splice(i,1); n++; }
+        }
+      } else if(p.kind==="court"){
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        if((Number(s.courtsAt)||0) < p.payload.at){
+          s.courts = p.payload.courts; s.shuttlePrice = p.payload.shuttlePrice;
+          s.shuttlesUsed = p.payload.shuttlesUsed; s.courtsAt = p.payload.at; n++;
+        }
+      } else if(p.kind==="status"){
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        if((Number(s.statusAt)||0) < p.payload.at){
+          s.status = p.payload.status; s.statusAt = p.payload.at;
+          if(p.payload.finishedAt) s.finishedAt = p.payload.finishedAt;
+          n++;
+        }
+      } else if(p.kind==="fee"){
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        const a = (s.attendees||[]).find(x=>x.memberId===p.payload.mid); if(!a) return;
+        if((Number(a.feeAt)||0) < p.payload.at){
+          if(p.payload.v==null) delete a.feeOverride; else a.feeOverride = p.payload.v;
+          a.feeAt = p.payload.at; n++;
+        }
       }
     }catch(e){}
   });
@@ -658,9 +711,11 @@ async function gasLoad(){
     }
     if(out && out.ok){
       gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = "";
-      serverRev = out.data? (Number(out.data.rev)||0) : 0;
+      /* บันทึกเป็น "เห็นแล้ว" เท่านั้น — serverRev จะขยับก็ต่อเมื่อเรารับข้อมูลชุดนี้มาไว้ใน db จริง */
+      seenRev = out.data? (Number(out.data.rev)||0) : 0;
       if(out.data){ return out.data; }
-      return null;   // ชีตยังว่าง — จะถูกเติมเมื่อบันทึกครั้งแรก
+      serverRev = 0;   // ชีตยังว่าง — จะถูกเติมเมื่อบันทึกครั้งแรก
+      return null;
     }
     SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธคำขออ่าน" + (out && out.error? " ("+out.error+")" : "");
   }catch(e){ SYNC.fails++; SYNC.lastErr = netErr(e, NET_GET_MS); }
@@ -671,19 +726,25 @@ async function gasSave(){
   for(let i=0; i<3; i++){
     const t0 = Date.now();
     try{
-      const body = JSON.stringify({data: db, k: clubKey()});
+      const body = JSON.stringify({data: db, k: clubKey(), by: (meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน")});
       const res = await fetchT(url, {method:"POST", body}, NET_POST_MS);
       const out = await res.json();
       SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
-      if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; pendSync(); return true; }
+      if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; seenRev = serverRev; pendSync(); return true; }
       if(out && out.conflict && out.data){
         // มีคนบันทึกข้อมูลใหม่กว่าไปก่อน — รับของใหม่มาเป็นฐาน แล้วเติมรายการของเรากลับเข้าไป
         gasOK = true;
-        db = out.data; serverRev = Number(db.rev)||0;
+        db = out.data; serverRev = Number(db.rev)||0; seenRev = serverRev;
         const n = pendReapply();
         lastRaw = JSON.stringify(db); cacheSave();
         if(meId) renderAll();
         if(n && i<2){ db.rev = serverRev + 1; continue; }   // ส่งซ้ำพร้อมรายการของเรา
+        if(out.blocked){
+          /* ระบบกลางกันไว้เพราะข้อมูลในเครื่องนี้เก่ากว่าของจริง — ดึงของจริงมาแสดงแทน */
+          SYNC.lastErr = "ระบบกลางป้องกันการเขียนทับ: " + (out.reasons||[]).join(" | ");
+          toast("⚠️ เครื่องนี้ถือข้อมูลเก่ากว่าระบบกลาง — ดึงข้อมูลล่าสุดมาให้แล้ว กรุณาตรวจแล้วทำรายการซ้ำ", true);
+          return true;
+        }
         toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว");
         return true;
       }
@@ -698,6 +759,7 @@ async function gasSave(){
     const chk = await gasLoad();
     if(chk && (chk.rev||0) >= (db.rev||0)){
       gasOK = true; SYNC.okAt = Date.now();
+      serverRev = Number(chk.rev)||0; seenRev = serverRev;
       SYNC.lastErr = "ตอบกลับช้าเกิน แต่ข้อมูลขึ้นระบบกลางเรียบร้อยแล้ว";
       pendSync(); return true;
     }
@@ -742,7 +804,7 @@ async function flushPending(){
     const rRev = remote? (Number(remote.rev)||0) : -1;
     if(remote && rRev > serverRev){
       // มีคนอื่นแก้ไประหว่างที่เราส่งไม่ได้ → ยึดของส่วนกลางเป็นฐาน แล้วเติมเฉพาะรายการของเรา
-      db = remote; serverRev = rRev;
+      db = remote; serverRev = rRev; seenRev = rRev;
       const n = pendReapply();
       lastRaw = JSON.stringify(db); cacheSave();
       if(meId) renderAll();
@@ -827,7 +889,7 @@ async function cleanSlipsAll(){
 async function retrySync(){
   toast("กำลังเชื่อมต่อ…");
   const remote = await gasLoad();
-  if(remote && (remote.rev||0) > (db.rev||0)){ db = remote; pendReapply(); }
+  if(remote && (remote.rev||0) > (db.rev||0)){ db = remote; serverRev = Number(remote.rev)||0; seenRev = serverRev; pendReapply(); }
   __pollFail = 0;
   await storeSave();
   updateSyncBadge(); if(meId) renderAll();
@@ -1553,6 +1615,17 @@ function activeSession(){
   return open[0] || null;
 }
 function courtsNeeded(n){ return n>0 ? Math.ceil(n / PLAYERS_PER_COURT) : 0; }
+/* activeSession() คืนนัดแรกที่ยังไม่ "จบแล้ว" และปุ่มเปิดนัดใหม่จะโผล่ก็ต่อเมื่อไม่มีนัดค้างเลย
+   เดิมปุ่มหายไปเฉยๆ โดยไม่บอกเหตุผล ทำให้เข้าใจผิดว่าเป็นปัญหาสิทธิ์ */
+function blockedNewSessionNote(s){
+  const d = new Date(); d.setHours(0,0,0,0);
+  const past = Date.parse(String(s.date)+"T23:59:59") < d.getTime();
+  if(!past) return "";
+  return `<div class="banner-warn" style="margin-bottom:12px;">
+    📌 ยังเปิดนัดใหม่ไม่ได้ เพราะนัด <b>${fmtDateShort(s.date)}</b> ยังไม่ปิด (สถานะ${s.status==="open"?"เปิดรับลงชื่อ":"กำลังตี"})<br>
+    ปิดนัดนี้ที่ <b>ขั้นที่ 5 สรุปผล</b> ก่อน แล้วปุ่มเปิดนัดใหม่จะกลับมาเองครับ
+  </div>`;
+}
 function stepper(cur, sid){
   const steps = [["📅","เปิดนัด"],["🙋","ลงชื่อ"],["🏟️","จองคอร์ท"],["🏸","เริ่มตี"],["🏁","สรุปผล"]];
   return `<div class="stepper">${steps.map((t,i)=>`
@@ -1926,8 +1999,10 @@ function renderPlay(){
       ${canOpenSession() ? `<button class="btn btn-lime big-join" onclick="openNewSession()">📅 กำหนดวันตี & เปิดนัดใหม่</button>`:""}
     </div>`;
   } else if(s.status==="open"){
+    if(canOpenSession()) html += blockedNewSessionNote(s);
     html += renderOpenSession(s);
   } else {
+    if(canOpenSession()) html += blockedNewSessionNote(s);
     html += renderPlayingSession(s);
   }
 
@@ -2376,7 +2451,10 @@ async function stepBack(sid){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
   if(s.status==="playing"){
     if(!confirm("ย้อนกลับไปขั้นที่ 2 (เปิดรับลงชื่อ)?\nข้อมูลคอร์ทและเซ็ตที่บันทึกไว้ยังอยู่ครบ")) return;
-    s.status="open"; await storeSave(); renderAll(); toast("◀️ กลับสู่ขั้นเปิดรับลงชื่อแล้ว");
+    const now = Date.now();
+    s.status="open"; s.statusAt = now;
+    pendAdd("status", { sid:s.id, status:"open", at:now });
+    await storeSave(); renderAll(); toast("◀️ กลับสู่ขั้นเปิดรับลงชื่อแล้ว");
   } else if(s.status==="open"){
     if(!confirm("ย้อนกลับจากขั้นนี้ = ยกเลิกนัดนี้ทั้งหมด\nยืนยันยกเลิกนัด?")) return;
     db.sessions = db.sessions.filter(x=>x.id!==sid);
@@ -2386,7 +2464,10 @@ async function stepBack(sid){
 async function reopenSession(sid){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
   if(!confirm("เปิดนัดนี้กลับเป็นสถานะ \"กำลังตี\" เพื่อแก้ไขข้อมูล?")) return;
-  s.status="playing"; await storeSave(); closeModal(); go("play"); toast("↩️ เปิดนัดกลับมาแก้ไขได้แล้ว");
+  const now = Date.now();
+  s.status="playing"; s.statusAt = now;
+  pendAdd("status", { sid:s.id, status:"playing", at:now });
+  await storeSave(); closeModal(); go("play"); toast("↩️ เปิดนัดกลับมาแก้ไขได้แล้ว");
 }
 
 /* ---------- แก้ไขการลงชื่อแทนสมาชิก (ทุกคนใช้ได้ ทั้งขั้นลงชื่อและขั้นกำลังตี) ---------- */
@@ -2399,7 +2480,7 @@ function openEditAttendees(sid){
     return `<div class="court-line">
       <span style="flex:1;">${m.emoji} ${esc(m.name)}${m.id===meId?' <span class="muted">(คุณ)</span>':""}${locked?' <span class="muted" style="font-size:10.5px;">🔒 มีเซ็ตบันทึกแล้ว</span>':""}</span>
       ${joined
-        ? `<button class="btn ${locked?"btn-ghost":"btn-danger"} btn-sm" onclick="editAttToggle('${sid}','${m.id}')">${locked?"✓ ร่วมตี":"− ถอนชื่อ"}</button>`
+        ? `<button class="btn ${(locked||(m.id!==meId&&!canManage(s)))?"btn-ghost":"btn-danger"} btn-sm" onclick="editAttToggle('${sid}','${m.id}')">${locked?"✓ ร่วมตี":(m.id!==meId&&!canManage(s))?"✓ ร่วมตี":"− ถอนชื่อ"}</button>`
         : `<button class="btn btn-lime btn-sm" onclick="editAttToggle('${sid}','${m.id}')">+ ลงชื่อ</button>`}
     </div>`;
   }).join("");
@@ -2414,16 +2495,20 @@ async function editAttToggle(sid, mid){
   const s = db.sessions.find(x=>x.id===sid); if(!s || s.status==="done") return;
   const i = s.attendees.findIndex(a=>a.memberId===mid);
   if(i>=0){
+    if(mid!==meId && !canManage(s)) return toast("ถอนชื่อคนอื่นได้เฉพาะผู้จัดการนัด — ถอนชื่อตัวเองได้ตามปกติ", true);
     const usedInSet = (s.sets||[]).some(x=> x.teamA.includes(mid) || x.teamB.includes(mid));
     if(usedInSet) return toast("มีผลเซ็ตของ "+nameOf(mid)+" บันทึกไว้ — ต้องลบเซ็ตนั้นก่อนจึงถอนชื่อได้", true);
     if(!confirm("ถอนชื่อ "+nameOf(mid)+" ออกจากนัดวันที่ "+fmtDateShort(s.date)+"?")) return;
     s.attendees.splice(i,1);
+    pendAdd("att", { sid:s.id, mid, op:"del", at:Date.now() });
     // กันข้อมูลค้าง: ถ้าคนนี้ถูกเลือกอยู่ในฟอร์มบันทึกเซ็ต ให้เอาออกด้วย
     setDraft.teamA = setDraft.teamA.filter(id=>id!==mid);
     setDraft.teamB = setDraft.teamB.filter(id=>id!==mid);
     toast("ถอนชื่อ "+nameOf(mid)+" แล้ว");
   } else {
-    s.attendees.push({ memberId:mid, hours:2, joinedAt:Date.now(), addedBy:meId });
+    const att = { memberId:mid, hours:2, joinedAt:Date.now(), addedBy:meId };
+    s.attendees.push(att);
+    pendAdd("att", { sid:s.id, mid, op:"add", obj:att, at:Date.now() });
     toast("ลงชื่อ "+nameOf(mid)+" เข้าร่วมแล้ว 🙌");
   }
   await storeSave(); renderAll(); openEditAttendees(sid);
@@ -2435,9 +2520,16 @@ async function toggleJoin(sid){
   const i = s.attendees.findIndex(a=>a.memberId===meId);
   if(i>=0){
     if(!confirm("ยืนยันถอนชื่อออกจากนัดวันที่ "+fmtDateShort(s.date)+"?")) return;
-    s.attendees.splice(i,1); toast("ถอนชื่อออกจากนัดแล้ว");
+    s.attendees.splice(i,1);
+    pendAdd("att", { sid:s.id, mid:meId, op:"del", at:Date.now() });
+    toast("ถอนชื่อออกจากนัดแล้ว");
   }
-  else { s.attendees.push({ memberId:meId, hours:2, joinedAt:Date.now() }); toast("ลงชื่อเข้าร่วมแล้ว 🙌"); }
+  else {
+    const att = { memberId:meId, hours:2, joinedAt:Date.now() };
+    s.attendees.push(att);
+    pendAdd("att", { sid:s.id, mid:meId, op:"add", obj:att, at:Date.now() });
+    toast("ลงชื่อเข้าร่วมแล้ว 🙌");
+  }
   await storeSave(); renderAll();
 }
 
@@ -2796,7 +2888,13 @@ async function saveStartPlay(sid){
   s.shuttlesUsed = Number($("spUsed").value)||0;
   const starting = s.status==="open";
   const backToPay = !!window.__backToPay; window.__backToPay = 0;
-  if(s.status!=="done") s.status = "playing";   // นัดที่จบแล้ว: แก้ตัวเลขได้โดยไม่เปลี่ยนสถานะ
+  const now = Date.now();
+  s.courtsAt = now;
+  pendAdd("court", { sid:s.id, courts:s.courts, shuttlePrice:s.shuttlePrice, shuttlesUsed:s.shuttlesUsed, at:now });
+  if(s.status!=="done"){   // นัดที่จบแล้ว: แก้ตัวเลขได้โดยไม่เปลี่ยนสถานะ
+    s.status = "playing"; s.statusAt = now;
+    pendAdd("status", { sid:s.id, status:"playing", at:now });
+  }
   await storeSave(); closeModal(); renderAll();
   if(s.status==="done" || backToPay) openPayment(sid);
   toast(starting? "เริ่มตีได้เลย! ช่วยกันบันทึกเซ็ตนะ 🏸":"บันทึกตัวเลขค่าใช้จ่ายแล้ว");
@@ -2806,7 +2904,10 @@ async function saveStartPlay(sid){
 async function finishSession(sid){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
   if(!confirm("จบนัดนี้และไปหน้าสรุปผล?")) return;
-  s.status = "done"; s.finishedAt = Date.now();
+  const now = Date.now();
+  freezeFeeAll(s);            // ตรึงยอดของทุกคน ณ วินาทีที่ปิดนัด — ยอดจะไม่ขยับตามจำนวนคนอีก
+  s.status = "done"; s.finishedAt = now; s.statusAt = now;
+  pendAdd("status", { sid:s.id, status:"done", finishedAt:now, at:now });
   await storeSave(); renderAll();
   if(!(gasUrl() && gasOK)) exportExcel(true);   // สำรองไฟล์ Excel อัตโนมัติเฉพาะเมื่อข้อมูลยังไม่ถูกส่งขึ้น Google Sheet (ไม่ได้ตั้งค่า/ซิงก์ไม่สำเร็จ) — ปกติกดส่งออกเองได้ที่เมนูจัดการก๊วน
   openSummary(sid);
@@ -3039,6 +3140,39 @@ function freezeFee(s, mid){
   const v = costSplit(s)[mid];
   if(v!=null) a.feeOverride = Math.round(v*100)/100;
 }
+/* ตรึงยอดของ "ทุกคน" ณ วินาทีที่กดปิดนัด
+   เหตุผล: costSplit() คำนวณสดจากจำนวนคน/ค่าคอร์ท/จำนวนลูกทุกครั้งที่เปิดดู
+   ถ้าไม่ตรึงไว้ ยอดของนัดที่จบไปแล้วจะขยับตามหลังได้ทุกครั้งที่มีคนแก้รายชื่อหรือตัวเลข */
+function freezeFeeAll(s){
+  if(!s) return;
+  const split = costSplit(s);
+  const now = Date.now();
+  (s.attendees||[]).forEach(a=>{
+    if(hasOverride(a)) return;
+    const v = split[a.memberId];
+    if(v==null) return;
+    a.feeOverride = Math.round(v*100)/100;
+    a.feeFrozen = true;          // ทำเครื่องหมายว่าเป็นยอดที่ระบบตรึงให้ ไม่ใช่ผู้จัดการกำหนดเอง
+    a.feeAt = now;
+    pendAdd("fee", { sid:s.id, mid:a.memberId, v:a.feeOverride, at:now });
+  });
+}
+/* คืนนัดกลับไปคิดยอดอัตโนมัติ (ใช้เมื่อต้องแก้ตัวเลขย้อนหลังหลังปิดนัดไปแล้ว)
+   ล้างเฉพาะยอดที่ระบบตรึงให้ ไม่แตะยอดที่ผู้จัดการกำหนดเองไว้ */
+async function unfreezeFees(sid){
+  const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
+  if(!confirm("คืนนัดนี้กลับไปคิดยอดอัตโนมัติ?\nยอดที่ผู้จัดการกำหนดเองไว้จะยังอยู่ครบ")) return;
+  const now = Date.now(); let n = 0;
+  (s.attendees||[]).forEach(a=>{
+    if(!a.feeFrozen) return;
+    delete a.feeOverride; delete a.feeFrozen; a.feeAt = now;
+    pendAdd("fee", { sid:s.id, mid:a.memberId, v:null, at:now });
+    n++;
+  });
+  if(!n) return toast("นัดนี้ยังไม่มียอดที่ระบบตรึงไว้");
+  await storeSave(); openAdjustPay(sid); renderAll();
+  toast("คืนค่าคิดยอดอัตโนมัติ "+n+" คนแล้ว");
+}
 function renderPaymentHtml(s){
   const split = costSplit(s);
   const total = totalCost(s);
@@ -3250,6 +3384,7 @@ function openAdjustPay(sid){
     <div class="row" style="margin-bottom:8px;"><span class="muted">ค่าใช้จ่ายรวมทั้งนัด</span><b>${money(totalCost(s))}</b></div>
     ${rows || '<div class="muted">ไม่มีผู้เข้าร่วม</div>'}
     <div style="height:12px;"></div>
+    ${(s.attendees||[]).some(a=>a.feeFrozen)? `<button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:10px;" onclick="unfreezeFees('${sid}')">↺ คืนค่าคิดยอดอัตโนมัติ (ยอดที่กำหนดเองยังอยู่)</button>`:""}
     <div class="frow">
       <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openSummary('${sid}')">📊 หน้าสรุปผล</button>
       <button class="btn btn-lime btn-sm" style="flex:1;" onclick="openPayment('${sid}')">💰 หน้าจ่ายเงิน</button>
@@ -3259,12 +3394,15 @@ async function setFeeOverride(sid, mid, val){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
   const a = s.attendees.find(a=>a.memberId===mid); if(!a) return;
   const v = String(val).trim();
+  let nv = null;
   if(v===""){ delete a.feeOverride; }
   else {
     const n = Number(v);
     if(isNaN(n) || n<0) return toast("ใส่ตัวเลข 0 ขึ้นไป", true);
-    a.feeOverride = n;
+    a.feeOverride = n; nv = n;
   }
+  a.feeAt = Date.now();
+  pendAdd("fee", { sid:s.id, mid, v:nv, at:a.feeAt });
   await storeSave(); openAdjustPay(sid); renderAll();
 }
 async function rmAttDone(sid, mid){
@@ -3275,6 +3413,7 @@ async function rmAttDone(sid, mid){
   if((s.sets||[]).some(x=> x.teamA.includes(mid) || x.teamB.includes(mid))) return toast("มีผลเซ็ตของ "+nameOf(mid)+" บันทึกไว้ — ต้องลบเซ็ตนั้นก่อน", true);
   if(!confirm("ถอนชื่อ "+nameOf(mid)+" ออกจากนัดนี้?\nค่าใช้จ่ายจะเฉลี่ยใหม่ให้คนที่เหลืออัตโนมัติ")) return;
   s.attendees.splice(i,1);
+  pendAdd("att", { sid:s.id, mid, op:"del", at:Date.now() });
   if(s.payNudge) delete s.payNudge[mid];
   await storeSave(); openAdjustPay(sid); renderAll();
   toast("ถอนชื่อ "+nameOf(mid)+" แล้ว — เฉลี่ยค่าใช้จ่ายใหม่เรียบร้อย");
@@ -4463,7 +4602,7 @@ document.addEventListener("visibilitychange", ()=>{
 /* รับข้อมูลชุดใหม่จากส่วนกลางมาใช้ พร้อมเติมรายการของเราที่ยังไม่ขึ้นฐานกลางกลับเข้าไป */
 function applyRemote(remote){
   if(!remote || (remote.rev||0) <= (db.rev||0)) return;
-  db = remote; serverRev = Number(remote.rev)||0;
+  db = remote; serverRev = Number(remote.rev)||0; seenRev = serverRev;
   const n = pendReapply();
   lastRaw = JSON.stringify(db); cacheSave();
   if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return; }
