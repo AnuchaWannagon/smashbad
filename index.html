@@ -165,7 +165,10 @@ select.court-sel:focus{ border-color:var(--lime); box-shadow:0 0 0 3px rgba(198,
 /* ---------- app shell ---------- */
 #appView{ display:none; }
 .topbar{ position:sticky; top:0; z-index:50; background:rgba(11,16,32,.85); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top, 0px); }
-.topbar-in{ max-width:720px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.topbar-in{ max-width:720px; margin:0 auto; padding:10px 16px 8px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.merow{ flex-basis:100%; display:flex; justify-content:flex-start; margin-top:2px; }
+.brand .b-s b{ color:var(--lime); font-weight:700; }
+.brand .b-s{ cursor:pointer; }
 .brand{ display:flex; align-items:center; gap:10px; }
 .brand .b-ic{ width:42px; height:42px; border-radius:12px; background:linear-gradient(140deg,var(--lime),var(--lime-dark)); display:flex; align-items:center; justify-content:center; font-size:22px; }
 .brand .b-t{ font-family:'Prompt',sans-serif; font-weight:800; font-size:20px; line-height:1.1; }
@@ -178,7 +181,8 @@ select.court-sel:focus{ border-color:var(--lime); box-shadow:0 0 0 3px rgba(198,
 .mecap .badges .tag{ font-size:9px; padding:1px 6px 2px; }
 .mecap .badges .pro-badge{ vertical-align:0; }
 .mecap .av{ width:26px; height:26px; border-radius:50%; background:var(--card2); display:flex; align-items:center; justify-content:center; font-size:14px; }
-.mecap .nm{ font-size:13px; font-weight:700; max-width:88px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mecap .nm{ font-size:13px; font-weight:700; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mecap .col{ flex-direction:row; align-items:center; gap:6px; }   /* บรรทัดเดียว: ชื่อ • Pro • บทบาท */
 .exitbtn{ display:flex; align-items:center; gap:5px; padding:8px 13px; border-radius:999px; background:rgba(255,107,94,.14); border:1px solid rgba(255,107,94,.4); font-size:15px; flex-shrink:0; color:var(--coral); font-weight:800; }
 .exitbtn span{ font-size:12.5px; font-family:'Prompt',sans-serif; }
 .exitbtn:active{ transform:scale(.95); }
@@ -290,12 +294,11 @@ table.tbl tr:last-child td{ border-bottom:none; }
   .card{ padding:13px; }
   .card h3{ font-size:17px; }
   .topbar-in{ padding:10px 10px; gap:6px; }
-  .brand .b-s{ display:none; }
+  .brand .b-s{ font-size:11px; }
   .brand .b-t{ font-size:17px; }
   .brand .b-ic{ width:36px; height:36px; font-size:19px; border-radius:10px; }
   .mecap{ padding:4px 8px 4px 5px; }
-  .mecap .nm{ max-width:64px; }
-  .mecap .tag{ display:none; }
+  .mecap .nm{ max-width:120px; }
   .exitbtn{ padding:7px 10px; font-size:14px; }
   .exitbtn span{ font-size:11px; }
   table.tbl{ font-size:12.5px; }
@@ -337,17 +340,19 @@ table.tbl tr:last-child td{ border-bottom:none; }
   <div class="topbar"><div class="topbar-in">
     <div class="brand">
       <div class="b-ic">🏸</div>
-      <div><div class="b-t">Smash Badminton</div><div class="b-s">ก๊วนแบดตบกระจาย</div></div>
+      <div><div class="b-t">Smash Badminton</div><div class="b-s" onclick="openSyncInfo()" title="แตะดูสถานะการเชื่อมต่อ">เวอร์ชัน <b class="verLbl"></b></div></div>
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
       <button class="exitbtn" onclick="toggleLang()" title="Switch language / สลับภาษา">🌐<span class="langLbl">EN</span></button>
-      <div class="mecap" onclick="openProfile()" id="meCap"></div>
       <button class="exitbtn" onclick="confirmLogout()" title="ออกจากแอป">🚪<span>Log-out</span></button>
     </div>
+    <!-- บรรทัดที่สอง: ชื่อผู้ใช้ + ป้าย Pro + บทบาท — แยกออกมาไม่ให้ซ้อนกับปุ่มขวา -->
+    <div class="merow"><div class="mecap" onclick="openProfile()" id="meCap"></div></div>
   </div></div>
 
   <div class="wrap">
     <div id="storageWarn" style="display:none;" class="banner-warn">⚠️ โหมดทดลอง: ระบบบันทึกข้อมูลกลางใช้ไม่ได้ ข้อมูลจะหายเมื่อปิดหน้า</div>
+    <div id="healthWarn" style="display:none; cursor:pointer;" class="banner-warn" onclick="openClientHealth()"></div>
     <div class="view" id="v-play"></div>
     <div class="view" id="v-members"></div>
     <div class="view" id="v-rank"></div>
@@ -382,7 +387,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.05a";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.05b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -515,7 +520,10 @@ let seenRev = -1;
 const SYNC = { lastMs:0, lastAt:0, okAt:0, fails:0, saveFails:0, bytes:0, pending:false, lastErr:"",
   blocked:null,        // ระบบกลางปฏิเสธการแก้ไขล่าสุดของเรา (เก็บเหตุผล + สำเนาที่ถูกปฏิเสธ)
   newerVer:"",         // พบว่าเพื่อนใช้แอปรุ่นใหม่กว่าเครื่องนี้
-  bootStale:false };   // เปิดแอปจากสำเนาในเครื่องเพราะติดต่อชีตไม่ได้
+  bootStale:false,     // เปิดแอปจากสำเนาในเครื่องเพราะติดต่อชีตไม่ได้
+  blockedCount:0,      // จำนวนครั้งที่ระบบกลางปฏิเสธการแก้ของเครื่องนี้ (ตั้งแต่เปิดแอป)
+  lastIssue:null };    // เหตุผิดปกติล่าสุดของเครื่องนี้ {msg, at} — จะถูกแนบไปกับการบันทึกครั้งถัดไปให้ Admin เห็น
+function noteIssue(msg){ SYNC.lastIssue = { msg:String(msg||"").slice(0,120), at:Date.now() }; }
 /* ระยะที่ยอมให้ข้อมูลในเครื่อง "ค้าง" ได้ก่อนขึ้นเตือนไม่ให้ป้อนต่อ */
 const STALE_PLAY_MS = 45000, STALE_IDLE_MS = 120000;
 let __forceNext = null;   // คำขอถัดไปให้เซิร์ฟเวอร์ยกเว้นกฎกันข้อมูลลดลง (ผู้จัดการตั้งใจ เช่น คืนค่าคิดยอดอัตโนมัติ)
@@ -766,6 +774,7 @@ async function gasSave(){
     const t0 = Date.now();
     try{
       db.appVer = APP_VER;                 // ให้เพื่อนรู้ว่ามีรุ่นใหม่แล้ว
+      healthStamp();                       // ฝังสถานะเครื่องนี้ (รุ่น/ปัญหาล่าสุด) ให้ Admin ตรวจได้จากในแอป
       db.saveTok = newTok();               // ตราประจำการบันทึกครั้งนี้ — ใช้ยืนยันว่า "ของเรา" ขึ้นชีตจริง
       const force = __forceNext || null;   // ตั้งค่าได้เฉพาะจากฟังก์ชันที่ผ่าน canManage() แล้ว (unfreezeFees / forceResend)
       const body = JSON.stringify({data: db, k: clubKey(), by: (meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน"), appVer: APP_VER, force});
@@ -777,6 +786,7 @@ async function gasSave(){
         /* เซิร์ฟเวอร์ตั้งรุ่นต่ำสุดไว้ — เครื่องนี้ต้องโหลดแอปใหม่ก่อน */
         SYNC.newerVer = out.minVer || "ใหม่กว่า"; showVerOverlay();
         SYNC.lastErr = "แอปในเครื่องนี้เป็นรุ่นเก่า (" + APP_VER + ") เซิร์ฟเวอร์ไม่รับการบันทึก";
+        noteIssue("รุ่นเก่า ถูกเซิร์ฟเวอร์ปฏิเสธ");
         gasOK = true; return false;
       }
       if(out && out.conflict && out.data){
@@ -786,6 +796,7 @@ async function gasSave(){
              — เก็บสำเนาที่ถูกปฏิเสธไว้ให้ผู้จัดการตัดสิน แล้วรับข้อมูลจริงมาแทนทั้งก้อน
              — ห้าม reapply คิวค้างส่ง ไม่งั้นจะวนส่งของเดิมไปโดนปฏิเสธซ้ำไม่รู้จบ (กรณี 2 ก.ย. 69) */
           SYNC.blocked = { at:Date.now(), reasons:(out.reasons||[]), raw:lastRaw, force:!!force };
+          SYNC.blockedCount++; noteIssue("ระบบกลางปฏิเสธ: " + (out.reasons||[]).join(" | "));
           __pend = []; pendStore(); __forceNext = null;
           db = out.data; serverRev = Number(db.rev)||0; seenRev = serverRev;
           lastRaw = JSON.stringify(db); cacheSave();
@@ -801,7 +812,7 @@ async function gasSave(){
         lastRaw = JSON.stringify(db); cacheSave();
         if(meId) renderAll();
         if(n && i<2){ db.rev = serverRev + 1; continue; }   // ส่งซ้ำพร้อมรายการของเรา
-        if(!mine) toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว");
+        if(!mine){ if(!n) noteIssue("ข้อมูลชนกับเพื่อน (rev " + serverRev + ") ไม่มีรายการในคิวกู้คืน"); toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว"); }
         return true;
       }
       SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธการบันทึก" + (out && out.error? " ("+out.error+")" : "") + " — ตรวจโค้ด Apps Script/ขนาดข้อมูล";
@@ -827,6 +838,7 @@ async function gasSave(){
     }
   }catch(e){}
   SYNC.lastErr = reason || SYNC.lastErr;
+  noteIssue("บันทึกไม่สำเร็จ: " + SYNC.lastErr);
   gasOK = false; SYNC.saveFails++; return false;
 }
 
@@ -896,6 +908,8 @@ function syncLabel(){
   return "🚫 โหมดทดลอง";
 }
 function updateSyncBadge(){
+  document.querySelectorAll(".verLbl").forEach(x=> x.textContent = APP_VER);
+  try{ updateHealthBanner(); }catch(e){}
   const el = document.getElementById("storageWarn");
   if(!el) return;
   el.onclick = openSyncInfo;
@@ -914,6 +928,103 @@ function updateSyncBadge(){
   else if(gasUrl() && !gasOK){ el.style.display="block"; el.innerHTML="⚠️ ซิงก์ไม่สำเร็จชั่วคราว — จะลองใหม่อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
   else if(storageOK){ el.style.display="none"; }
   else { el.style.display="block"; el.innerHTML="⚠️ โหมดทดลอง — <u>แตะดูรายละเอียด</u>"; }
+}
+
+/* ---------- สุขภาพเครื่องสมาชิก: ฝังไปกับข้อมูลทุกครั้งที่บันทึก (ไม่มีการเขียนเพิ่ม) ----------
+   db.clients[memberId] = { n:ชื่อ, v:รุ่นแอป, at:บันทึกล่าสุด, ok:ซิงก์สำเร็จล่าสุด, sf:บันทึกล้มเหลวสะสม,
+                           rf:อ่านล้มเหลวสะสม, bl:ถูกปฏิเสธ, issue:เหตุผิดปกติล่าสุด, issueAt }
+   Admin/ผู้จัดการเห็นทั้งตารางจากปุ่มในหน้าสถานะการเชื่อมต่อ และมีแถบเตือนบนหน้าแรกเมื่อพบปัญหา */
+const HEALTH_KEEP_DAYS = 30, HEALTH_ISSUE_HOURS = 48;
+function healthStamp(){
+  if(!meId || !db) return;
+  if(!db.clients) db.clients = {};
+  const c = db.clients[meId] || {};
+  c.n = nameOf(meId); c.v = APP_VER; c.at = Date.now(); c.ok = SYNC.okAt || 0;
+  c.sf = SYNC.saveFails; c.rf = SYNC.fails; c.bl = (c.bl||0) + SYNC.blockedCount; SYNC.blockedCount = 0;
+  if(SYNC.lastIssue){ c.issue = SYNC.lastIssue.msg; c.issueAt = SYNC.lastIssue.at; SYNC.lastIssue = null; }
+  c.ua = (navigator.userAgent||"").replace(/.*\((.*?)\).*/, "$1").slice(0,60);   // รุ่นเครื่อง/OS แบบย่อ ไว้ช่วยวินิจฉัย
+  db.clients[meId] = c;
+  const cut = Date.now() - HEALTH_KEEP_DAYS*86400000;
+  Object.keys(db.clients).forEach(k=>{ if((db.clients[k].at||0) < cut) delete db.clients[k]; });
+}
+/* สรุปปัญหาที่ Admin ควรรู้ตอนนี้ */
+function healthIssues(){
+  const out = { old:[], issues:[], rows:[] };
+  const cl = (db && db.clients) || {};
+  const cutIssue = Date.now() - HEALTH_ISSUE_HOURS*3600000;
+  Object.keys(cl).forEach(id=>{
+    const c = cl[id]; const row = Object.assign({ id }, c);
+    row.isOld = !!(c.v && verCmp(c.v, APP_VER) < 0) || !c.v;
+    row.hasIssue = !!(c.issueAt && c.issueAt > cutIssue) || (c.bl||0) > 0;
+    if(row.isOld) out.old.push(row);
+    if(row.hasIssue) out.issues.push(row);
+    out.rows.push(row);
+  });
+  out.rows.sort((a,b)=> (b.hasIssue-a.hasIssue) || (b.isOld-a.isOld) || ((b.at||0)-(a.at||0)));
+  return out;
+}
+function canSeeHealth(){ return !!meId && (isAdmin() || isDefaultMgr()); }
+function updateHealthBanner(){
+  const el = document.getElementById("healthWarn"); if(!el) return;
+  if(!canSeeHealth() || !db){ el.style.display = "none"; return; }
+  const h = healthIssues();
+  const parts = [];
+  if(h.old.length)    parts.push("👴 " + h.old.length + " คนยังใช้แอปรุ่นเก่า");
+  if(h.issues.length) parts.push("🩺 " + h.issues.length + " คนมีปัญหาการซิงก์ใน " + HEALTH_ISSUE_HOURS + " ชม.");
+  if(!parts.length){ el.style.display = "none"; return; }
+  el.style.display = "block";
+  el.innerHTML = "🛠️ <b>Admin:</b> " + parts.join(" • ") + " — <u>แตะดูรายชื่อและแจ้งเตือน</u>";
+}
+function fmtAgo(t){
+  if(!t) return "-";
+  const m = Math.round((Date.now()-t)/60000);
+  if(m < 1) return "เมื่อครู่"; if(m < 60) return m + " นาที"; const h = Math.round(m/60);
+  if(h < 48) return h + " ชม."; return Math.round(h/24) + " วัน";
+}
+function openClientHealth(){
+  if(!canSeeHealth()) return toast("เฉพาะ Admin/ผู้จัดการ", true);
+  const h = healthIssues();
+  const rows = h.rows.map(r=>`
+    <tr style="${r.hasIssue? "background:rgba(255,92,92,.10);" : r.isOld? "background:rgba(255,194,75,.10);" : ""}">
+      <td><b>${esc(r.n||nameOf(r.id))}</b><div class="muted" style="font-size:10.5px;">${esc(r.ua||"")}</div></td>
+      <td style="white-space:nowrap; color:${r.isOld? "var(--amber)" : "var(--lime)"};">${esc(r.v||"ก่อน 09.05a")}${r.isOld? " ⚠️":""}</td>
+      <td style="white-space:nowrap;">${fmtAgo(r.at)}</td>
+      <td style="text-align:center;">${(r.sf||0)}/${(r.rf||0)}/${(r.bl||0)}</td>
+      <td style="font-size:11.5px;">${r.issue? esc(r.issue) + `<div class="muted" style="font-size:10.5px;">${fmtAgo(r.issueAt)}ที่แล้ว</div>` : '<span class="muted">-</span>'}</td>
+    </tr>`).join("");
+  modal(`
+    <div class="modal-head"><h3>🩺 สุขภาพเครื่องสมาชิก</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p class="muted" style="font-size:12.5px; margin:0 0 10px;">ข้อมูลนี้แต่ละเครื่องแนบมาเองทุกครั้งที่บันทึก จึงเห็นเฉพาะคนที่เคยบันทึกในรอบ ${HEALTH_KEEP_DAYS} วัน
+    รุ่นปัจจุบัน <b>${APP_VER}</b> • คอลัมน์ "ล้มเหลว" = บันทึก/อ่าน/ถูกปฏิเสธ (สะสมตั้งแต่เครื่องนั้นเปิดแอป)</p>
+    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+      <span class="tag" style="background:rgba(255,194,75,.15); color:var(--amber);">รุ่นเก่า ${h.old.length} คน</span>
+      <span class="tag" style="background:rgba(255,92,92,.15); color:#ff8a8a;">มีปัญหา ${HEALTH_ISSUE_HOURS} ชม. ${h.issues.length} คน</span>
+      <span class="tag" style="background:rgba(198,242,78,.12); color:var(--lime);">ทั้งหมด ${h.rows.length} เครื่อง</span>
+    </div>
+    <div style="overflow:auto; max-height:52vh; border:1px solid var(--line); border-radius:12px;">
+    <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+      <thead><tr style="position:sticky; top:0; background:var(--card2);"><th style="text-align:left; padding:8px;">สมาชิก</th><th style="text-align:left; padding:8px;">รุ่นแอป</th><th style="text-align:left; padding:8px;">บันทึกล่าสุด</th><th style="padding:8px;">ล้มเหลว</th><th style="text-align:left; padding:8px;">เหตุล่าสุด</th></tr></thead>
+      <tbody>${rows.replace(/<td/g,'<td style="padding:7px 8px; border-top:1px solid var(--line); vertical-align:top;"')||'<tr><td colspan="5" class="muted" style="padding:12px;">ยังไม่มีข้อมูล — จะเริ่มมีเมื่อสมาชิกใช้แอปรุ่น 2026.09.05b ขึ้นไปบันทึกครั้งแรก</td></tr>'}</tbody>
+    </table></div>
+    ${(h.old.length||h.issues.length)? `<button class="btn btn-lime btn-block" style="margin-top:12px;" onclick="postHealthNotice()">📢 โพสต์ประกาศเตือนขึ้นกระดาน (ระบุชื่อ)</button>` : ""}
+    <p class="muted" style="font-size:11.5px; margin-top:10px;">ฝั่งเซิร์ฟเวอร์: แท็บ ChangeLog ในชีตบันทึกรุ่นแอปท้ายชื่อผู้บันทึกทุกครั้ง และเมื่อพร้อมให้ตั้ง MIN_APP_VER ใน Apps Script เพื่อกั้นรุ่นเก่าไม่ให้เขียน</p>
+  `);
+}
+/* Admin กดปุ่มเดียว: สร้างประกาศบนกระดาน ระบุชื่อคนที่ต้องอัปเดต/มีปัญหา พร้อมวิธีแก้ */
+async function postHealthNotice(){
+  if(!canSeeHealth()) return;
+  const h = healthIssues();
+  const oldNames = h.old.map(r=>r.n||nameOf(r.id));
+  const issNames = h.issues.filter(r=>!r.isOld).map(r=>r.n||nameOf(r.id));
+  let text = "📢 แจ้งจาก Admin: ";
+  if(oldNames.length) text += "แอปของ " + oldNames.join(", ") + " ยังเป็นรุ่นเก่า กรุณาปิดแอปให้สนิท (ปัดออกจากรายการแอปล่าสุด) แล้วเปิดใหม่ ให้เห็นเวอร์ชัน " + APP_VER + " ใต้ชื่อแอป ";
+  if(issNames.length) text += (oldNames.length? "• " : "") + issNames.join(", ") + " เครื่องมีปัญหาซิงก์ ถ้าเห็นแถบเหลือง/แดงด้านบน ให้รอสักครู่หรือปิดเปิดแอปใหม่ก่อนป้อนข้อมูลต่อ";
+  if(!confirm("โพสต์ประกาศนี้ขึ้นกระดาน?\n\n" + text)) return;
+  db.board = db.board||[];
+  const bmsg = { id:uid(), from:meId, text:text.slice(0,300), at:Date.now(), type:"ann" };
+  db.board.push(bmsg); pendAdd("board", bmsg);
+  if(db.board.length>200) db.board = db.board.slice(-200);
+  await storeSave(); closeModal(); renderAll(); toast("ส่งประกาศแล้ว 📢");
 }
 
 /* ---------- แอปรุ่นเก่า: บังหน้าจอทั้งหมด ห้ามป้อนต่อ จนกว่าจะโหลดรุ่นใหม่ ---------- */
@@ -994,6 +1105,7 @@ function openSyncInfo(){
     <div class="row" style="margin-bottom:6px;"><span class="muted">เวลาซิงก์ครั้งล่าสุด</span><b>${SYNC.lastMs? SYNC.lastMs+" ms":"-"}</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">ล้มเหลวสะสม (อ่าน/บันทึก)</span><b>${SYNC.fails} / ${SYNC.saveFails}</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">rev ที่ยืนยันแล้ว / ที่เห็นบนชีต</span><b>${serverRev} / ${seenRev}</b></div>
+    ${canSeeHealth()? `<button class="btn btn-ghost btn-block" style="margin:6px 0 10px;" onclick="openClientHealth()">🩺 สุขภาพเครื่องสมาชิก (Admin)</button>` : ""}
     <div class="row" style="margin-bottom:6px;"><span class="muted">รายการค้างส่งในเครื่อง</span><b>${__pend.length} รายการ</b></div>
     ${SYNC.lastErr? `<div class="row" style="margin-bottom:6px;"><span class="muted">ข้อความล่าสุด</span><b style="font-weight:600;font-size:12px;text-align:right;max-width:60%;">${esc(SYNC.lastErr)}</b></div>` : ""}
     <div class="row" style="margin-bottom:6px;"><span class="muted">สำเร็จครั้งล่าสุด</span><b>${SYNC.okAt? new Date(SYNC.okAt).toLocaleTimeString(loc(),{hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "-"}</b></div>
@@ -4830,7 +4942,7 @@ async function init(){
       /* เน็ต/ชีตมีปัญหา — ใช้สำเนาในเครื่องไปก่อน "แบบอ่านอย่างเดียว"
          ค้างส่งเฉพาะเมื่อมีรายการของเราในคิวจริง (เดิมตั้ง pending=true เสมอ ทำให้ดันสำเนาเก่าขึ้นไป) */
       SYNC.pending = __pend.length > 0;
-      SYNC.bootStale = true;
+      SYNC.bootStale = true; noteIssue("เปิดแอปจากสำเนาในเครื่อง ติดต่อชีตไม่ได้: " + SYNC.lastErr);
     } else {
       /* ไม่มีทั้งชีตและสำเนาในเครื่อง — ห้ามสร้างข้อมูลตั้งต้นแล้วส่งขึ้นไป (เดิมส่ง rev 1 ไป 24 ครั้งใน log)
          แสดงหน้ารอเชื่อมต่อ แล้วลองใหม่เอง */
