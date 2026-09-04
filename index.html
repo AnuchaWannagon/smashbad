@@ -166,7 +166,8 @@ select.court-sel:focus{ border-color:var(--lime); box-shadow:0 0 0 3px rgba(198,
 #appView{ display:none; }
 .topbar{ position:sticky; top:0; z-index:50; background:rgba(11,16,32,.85); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top, 0px); }
 .topbar-in{ max-width:720px; margin:0 auto; padding:10px 16px 8px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-.merow{ flex-basis:100%; display:flex; justify-content:flex-start; margin-top:2px; }
+.merow{ flex-basis:100%; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:2px; }
+.merow .mecap{ min-width:0; overflow:hidden; }
 .brand .b-s b{ color:var(--lime); font-weight:700; }
 .brand .b-s{ cursor:pointer; }
 .brand{ display:flex; align-items:center; gap:10px; }
@@ -344,10 +345,12 @@ table.tbl tr:last-child td{ border-bottom:none; }
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
       <button class="exitbtn" onclick="toggleLang()" title="Switch language / สลับภาษา">🌐<span class="langLbl">EN</span></button>
+    </div>
+    <!-- บรรทัดที่สอง: ชื่อผู้ใช้ + ป้าย Pro + บทบาท (ซ้าย) และ Log-out ชิดขวาสุด -->
+    <div class="merow">
+      <div class="mecap" onclick="openProfile()" id="meCap"></div>
       <button class="exitbtn" onclick="confirmLogout()" title="ออกจากแอป">🚪<span>Log-out</span></button>
     </div>
-    <!-- บรรทัดที่สอง: ชื่อผู้ใช้ + ป้าย Pro + บทบาท — แยกออกมาไม่ให้ซ้อนกับปุ่มขวา -->
-    <div class="merow"><div class="mecap" onclick="openProfile()" id="meCap"></div></div>
   </div></div>
 
   <div class="wrap">
@@ -387,7 +390,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.05b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.05d";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -742,11 +745,15 @@ function pruneSlips(days){
 }
 
 /* ---------- อ่าน/เขียนฐานข้อมูลกลาง (Google Sheet ผ่าน Apps Script) ---------- */
-async function gasLoad(){
+/* knownRev: ส่ง rev ที่เครื่องนี้ยืนยันแล้วไปด้วย — ถ้าชีตยังอยู่ rev เดิม เซิร์ฟเวอร์ (รุ่น 05c ขึ้นไป) จะตอบสั้นๆ
+   {same:true} ~60 ไบต์ แทนข้อมูลทั้งก้อน ~600 KB → poll ทุก 6 วินาทีตอนกำลังตีจึงแทบไม่กินเน็ต
+   คืนค่า: object ข้อมูล | "same" | null(ล้มเหลว) — ผู้เรียกที่ไม่ส่ง knownRev จะไม่ได้ "same" เลย */
+async function gasLoad(knownRev){
   const url = gasUrl(); if(!url) return null;
   const t0 = Date.now();
   try{
-    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + "api=1&k=" + encodeURIComponent(clubKey()), {method:"GET"}, NET_GET_MS);
+    const q = "api=1&k=" + encodeURIComponent(clubKey()) + (knownRev!=null && knownRev>=0 ? "&rev=" + knownRev : "");
+    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q, {method:"GET"}, NET_GET_MS);
     const txt = await res.text();
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = txt.length;
     const out = JSON.parse(txt);
@@ -758,6 +765,7 @@ async function gasLoad(){
     }
     if(out && out.ok){
       gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = "";
+      if(out.same){ seenRev = Number(out.rev)||seenRev; return "same"; }   // ชีตยังไม่เปลี่ยน
       /* บันทึกเป็น "เห็นแล้ว" เท่านั้น — serverRev จะขยับก็ต่อเมื่อเรารับข้อมูลชุดนี้มาไว้ใน db จริง */
       seenRev = out.data? (Number(out.data.rev)||0) : 0;
       if(out.data){ checkVer(out.data); return out.data; }
@@ -1111,7 +1119,8 @@ function openSyncInfo(){
     <div class="row" style="margin-bottom:6px;"><span class="muted">สำเร็จครั้งล่าสุด</span><b>${SYNC.okAt? new Date(SYNC.okAt).toLocaleTimeString(loc(),{hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "-"}</b></div>
     ${SYNC.lastErr? `<div class="banner-warn" style="font-size:11.5px;">🔎 สาเหตุล่าสุด: ${esc(SYNC.lastErr)}</div>`:""}
     <div class="row" style="margin-bottom:10px;"><span class="muted">เวอร์ชันแอป</span><b>${APP_VER}</b></div>
-    ${size>45000? `<div class="banner-warn" style="font-size:11.5px;">⚠️ ข้อมูลเกิน 45,000 ตัวอักษร — ถ้าฝั่ง Apps Script เก็บข้อมูลทั้งก้อนไว้ในเซลล์เดียว จะชนเพดานของ Google Sheet ที่ 50,000 ตัวอักษรต่อเซลล์ และบันทึกไม่สำเร็จถาวร</div>`:""}
+    ${size>4000000? `<div class="banner-warn" style="font-size:11.5px;">⚠️ ข้อมูลใหญ่เกิน 4 MB — ใกล้ขีดจำกัดขนาดคำขอของ Apps Script (ราว 50 MB) และชีตจะมีมากกว่า 90 เซลล์ต่อสำเนา ควรตัดสลิป/นัดเก่าออก</div>`:""}
+    <div class="muted" style="font-size:11px; margin:-2px 0 8px;">ฝั่งชีตตัดข้อมูลเป็นก้อนละ 45,000 ตัวอักษรต่อเซลล์อัตโนมัติ (ตอนนี้ ${Math.ceil(size/45000)} เซลล์) จึงไม่ติดเพดาน 50,000 ตัวอักษรต่อเซลล์ของ Google Sheet</div>
     ${heavy? `<div class="banner-warn">⚠️ ข้อมูลใหญ่กว่าปกติ — ส่วนใหญ่มาจากรูปสลิป ทำให้ซิงก์ช้าและหลุดง่าย${mg? " กดปุ่ม “ลดขนาดข้อมูล” ด้านล่างได้":""}</div>`:""}
     <p class="muted" style="margin-top:0; font-size:12px;">แอปบันทึกลงเครื่องก่อนเสมอ แล้วส่งขึ้น Google Sheet ให้อัตโนมัติ (ลองซ้ำเองเมื่อไม่สำเร็จ) และดึงข้อมูลใหม่จากเพื่อนทุก 6 วินาทีขณะกำลังตี / 20 วินาทีในเวลาปกติ • รูปสลิปของนัดที่จบเกิน ${SLIP_KEEP_DAYS} วันจะถูกตัดออกอัตโนมัติเพื่อให้ซิงก์เร็ว (ยอดเงินและผู้อนุมัติยังอยู่ครบ)
     ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ต แล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างจะถูกส่งให้เองไม่หายไปไหน"}</p>
@@ -3437,7 +3446,7 @@ function freezeFeeAll(s){
    ล้างเฉพาะยอดที่ระบบตรึงให้ ไม่แตะยอดที่ผู้จัดการกำหนดเองไว้ */
 async function unfreezeFees(sid){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
-  if(!confirm("คืนนัดนี้กลับไปคิดยอดอัตโนมัติ?\nยอดที่ผู้จัดการกำหนดเองไว้จะยังอยู่ครบ")) return;
+  if(!confirm("คิดยอดจ่ายของนัดนี้ใหม่อัตโนมัติตามจำนวนคน/ค่าใช้จ่ายปัจจุบัน?\nยอดที่ผู้จัดการกำหนดเองไว้จะยังอยู่ครบ")) return;
   const now = Date.now(); let n = 0;
   (s.attendees||[]).forEach(a=>{
     if(!a.feeFrozen) return;
@@ -3449,7 +3458,7 @@ async function unfreezeFees(sid){
   /* ตั้งใจให้ยอดตรึงหาย — แจ้งเซิร์ฟเวอร์ให้ยกเว้นกฎ "ข้อมูลลดลงผิดปกติ" สำหรับการบันทึกครั้งนี้ */
   __forceNext = { reason:"unfreeze", sid:s.id, n, by:meId, at:now };
   await storeSave(); openAdjustPay(sid); renderAll();
-  if(!SYNC.blocked) toast("คืนค่าคิดยอดอัตโนมัติ "+n+" คนแล้ว");
+  if(!SYNC.blocked) toast("คิดยอดจ่ายใหม่อัตโนมัติ "+n+" คนแล้ว");
 }
 function renderPaymentHtml(s){
   const split = costSplit(s);
@@ -3662,9 +3671,9 @@ function openAdjustPay(sid){
     <div class="row" style="margin-bottom:8px;"><span class="muted">ค่าใช้จ่ายรวมทั้งนัด</span><b>${money(totalCost(s))}</b></div>
     ${rows || '<div class="muted">ไม่มีผู้เข้าร่วม</div>'}
     <div style="height:12px;"></div>
-    ${(s.attendees||[]).some(a=>a.feeFrozen)? `<button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:10px;" onclick="unfreezeFees('${sid}')">↺ คืนค่าคิดยอดอัตโนมัติ (ยอดที่กำหนดเองยังอยู่)</button>`:""}
+    ${(s.attendees||[]).some(a=>a.feeFrozen)? `<button class="btn btn-lime btn-block" style="margin-bottom:10px; font-weight:800; box-shadow:0 0 0 3px rgba(198,242,78,.25);" onclick="unfreezeFees('${sid}')">🔄 คิดยอดจ่ายใหม่อัตโนมัติ (ยอดที่กำหนดเองยังอยู่)</button>`:""}
     <div class="frow">
-      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openSummary('${sid}')">📊 หน้าสรุปผล</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openSummary('${sid}')">↩️ ย้อนกลับไปหน้าสรุปผล</button>
       <button class="btn btn-lime btn-sm" style="flex:1;" onclick="openPayment('${sid}')">💰 หน้าจ่ายเงิน</button>
     </div>`);
 }
@@ -4900,7 +4909,10 @@ async function pollRemote(){
   if(__saving) return;                 // กำลังบันทึกอยู่ — รอให้จบก่อน กันข้อมูลชนกันเอง
   try{
     await flushPending();              // มีของค้างในเครื่อง → ส่งขึ้นก่อน
-    const remote = await gasLoad();
+    /* ส่ง rev ที่ยืนยันแล้วไปถาม — ถ้าไม่เปลี่ยน เซิร์ฟเวอร์ตอบสั้น ไม่ต้องดาวน์โหลดทั้งก้อน
+       (ถามด้วย serverRev เฉพาะเมื่อไม่มีของค้าง เพราะตอนมีของค้าง db.rev ถูกดันล่วงหน้าไว้) */
+    const remote = await gasLoad(SYNC.pending? -1 : serverRev);
+    if(remote==="same"){ __pollFail = 0; SYNC.bootStale = false; updateSyncBadge(); return; }
     if(!remote){ if(!gasOK) __pollFail++; updateSyncBadge(); return; }
     __pollFail = 0; SYNC.bootStale = false;
     checkVer(remote);
