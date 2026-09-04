@@ -382,7 +382,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.08.23b";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.05a";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -512,7 +512,31 @@ let serverRev = -1;
 let seenRev = -1;
 
 /* ---------- ตัวชี้วัดการซิงก์ (ไว้วินิจฉัยว่า "ช้า/ไม่สำเร็จ" เกิดจากอะไร) ---------- */
-const SYNC = { lastMs:0, lastAt:0, okAt:0, fails:0, saveFails:0, bytes:0, pending:false, lastErr:"" };
+const SYNC = { lastMs:0, lastAt:0, okAt:0, fails:0, saveFails:0, bytes:0, pending:false, lastErr:"",
+  blocked:null,        // ระบบกลางปฏิเสธการแก้ไขล่าสุดของเรา (เก็บเหตุผล + สำเนาที่ถูกปฏิเสธ)
+  newerVer:"",         // พบว่าเพื่อนใช้แอปรุ่นใหม่กว่าเครื่องนี้
+  bootStale:false };   // เปิดแอปจากสำเนาในเครื่องเพราะติดต่อชีตไม่ได้
+/* ระยะที่ยอมให้ข้อมูลในเครื่อง "ค้าง" ได้ก่อนขึ้นเตือนไม่ให้ป้อนต่อ */
+const STALE_PLAY_MS = 45000, STALE_IDLE_MS = 120000;
+let __forceNext = null;   // คำขอถัดไปให้เซิร์ฟเวอร์ยกเว้นกฎกันข้อมูลลดลง (ผู้จัดการตั้งใจ เช่น คืนค่าคิดยอดอัตโนมัติ)
+function newTok(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+/* เปรียบเทียบเวอร์ชันรูปแบบ yyyy.mm.dd + ตัวอักษร */
+function verCmp(a, b){ a=String(a||""); b=String(b||""); return a<b? -1 : a>b? 1 : 0; }
+/* ข้อมูลจากส่วนกลางชุดนี้ "ใหม่กว่าที่เครื่องนี้ยืนยันแล้ว" หรือไม่
+   เทียบกับ serverRev (ฐานที่ยืนยันแล้ว) ไม่ใช่ db.rev ที่ถูกดันล่วงหน้าตอนบันทึก
+   และถ้า rev เท่ากันแต่ saveTok ไม่ใช่ของเรา แปลว่าเพื่อนได้ rev นั้นไปแทน → ต้องรับมา */
+function remoteNewer(remote){
+  if(!remote) return false;
+  const rRev = Number(remote.rev)||0;
+  if(rRev > serverRev) return true;
+  if(remote.saveTok && rRev >= (Number(db.rev)||0) && remote.saveTok !== db.saveTok) return true;
+  return false;
+}
+function checkVer(remote){
+  if(remote && remote.appVer && verCmp(remote.appVer, APP_VER) > 0){
+    SYNC.newerVer = remote.appVer; showVerOverlay();
+  }
+}
 const CACHE_LS = "smash-db-cache";   // สำเนาข้อมูลล่าสุดในเครื่อง — เปิดแอปไว + กันข้อมูลหายตอนเน็ตหลุด
 const PEND_LS  = "smash-pending";    // รายการที่ "เรา" เพิ่งเพิ่ม แต่ยังไม่ยืนยันว่าขึ้นฐานกลางแล้ว
 /* timeout: การเขียนต้องเผื่อเวลามาก เพราะ Apps Script ต้องเขียน Google Sheet ทั้งก้อน
@@ -599,6 +623,10 @@ function pendPresent(p){
       const a = (s.attendees||[]).find(x=>x.memberId===p.payload.mid);
       return !a || (Number(a.feeAt)||0) >= p.payload.at;
     }
+    if(p.kind==="paid"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return true;
+      return (Number((s.paidAt||{})[p.payload.mid])||0) >= p.payload.at;
+    }
   }catch(e){}
   return true;
 }
@@ -661,6 +689,17 @@ function pendReapply(){
           if(p.payload.v==null) delete a.feeOverride; else a.feeOverride = p.payload.v;
           a.feeAt = p.payload.at; n++;
         }
+      } else if(p.kind==="paid"){
+        /* สถานะ "จ่ายแล้ว/ยกเลิก" — เดิมไม่มีคิวกู้คืน ผู้จัดการกดจ่ายให้เพื่อนแล้วหายบ่อยเมื่อชนกับคนอื่น */
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        if(!s.paidAt) s.paidAt = {};
+        if((Number(s.paidAt[p.payload.mid])||0) < p.payload.at){
+          if(!s.paid) s.paid = {}; if(!s.payInfo) s.payInfo = {};
+          s.paid[p.payload.mid] = !!p.payload.v;
+          if(p.payload.v){ if(p.payload.info) s.payInfo[p.payload.mid] = p.payload.info; if(s.payReq) delete s.payReq[p.payload.mid]; }
+          else { delete s.payInfo[p.payload.mid]; if(p.payload.req){ if(!s.payReq) s.payReq = {}; s.payReq[p.payload.mid] = p.payload.req; } }
+          s.paidAt[p.payload.mid] = p.payload.at; n++;
+        }
       }
     }catch(e){}
   });
@@ -713,7 +752,7 @@ async function gasLoad(){
       gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = "";
       /* บันทึกเป็น "เห็นแล้ว" เท่านั้น — serverRev จะขยับก็ต่อเมื่อเรารับข้อมูลชุดนี้มาไว้ใน db จริง */
       seenRev = out.data? (Number(out.data.rev)||0) : 0;
-      if(out.data){ return out.data; }
+      if(out.data){ checkVer(out.data); return out.data; }
       serverRev = 0;   // ชีตยังว่าง — จะถูกเติมเมื่อบันทึกครั้งแรก
       return null;
     }
@@ -726,26 +765,43 @@ async function gasSave(){
   for(let i=0; i<3; i++){
     const t0 = Date.now();
     try{
-      const body = JSON.stringify({data: db, k: clubKey(), by: (meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน")});
+      db.appVer = APP_VER;                 // ให้เพื่อนรู้ว่ามีรุ่นใหม่แล้ว
+      db.saveTok = newTok();               // ตราประจำการบันทึกครั้งนี้ — ใช้ยืนยันว่า "ของเรา" ขึ้นชีตจริง
+      const force = __forceNext || null;   // ตั้งค่าได้เฉพาะจากฟังก์ชันที่ผ่าน canManage() แล้ว (unfreezeFees / forceResend)
+      const body = JSON.stringify({data: db, k: clubKey(), by: (meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน"), appVer: APP_VER, force});
       const res = await fetchT(url, {method:"POST", body}, NET_POST_MS);
       const out = await res.json();
       SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
-      if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; seenRev = serverRev; pendSync(); return true; }
+      if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; seenRev = serverRev; __forceNext = null; SYNC.blocked = null; pendSync(); return true; }
+      if(out && out.ok===false && out.error==="app-outdated"){
+        /* เซิร์ฟเวอร์ตั้งรุ่นต่ำสุดไว้ — เครื่องนี้ต้องโหลดแอปใหม่ก่อน */
+        SYNC.newerVer = out.minVer || "ใหม่กว่า"; showVerOverlay();
+        SYNC.lastErr = "แอปในเครื่องนี้เป็นรุ่นเก่า (" + APP_VER + ") เซิร์ฟเวอร์ไม่รับการบันทึก";
+        gasOK = true; return false;
+      }
       if(out && out.conflict && out.data){
-        // มีคนบันทึกข้อมูลใหม่กว่าไปก่อน — รับของใหม่มาเป็นฐาน แล้วเติมรายการของเรากลับเข้าไป
         gasOK = true;
+        if(out.blocked){
+          /* ระบบกลางปฏิเสธการแก้ไขของเรา (เช่น ข้อมูลลดลงผิดปกติ)
+             — เก็บสำเนาที่ถูกปฏิเสธไว้ให้ผู้จัดการตัดสิน แล้วรับข้อมูลจริงมาแทนทั้งก้อน
+             — ห้าม reapply คิวค้างส่ง ไม่งั้นจะวนส่งของเดิมไปโดนปฏิเสธซ้ำไม่รู้จบ (กรณี 2 ก.ย. 69) */
+          SYNC.blocked = { at:Date.now(), reasons:(out.reasons||[]), raw:lastRaw, force:!!force };
+          __pend = []; pendStore(); __forceNext = null;
+          db = out.data; serverRev = Number(db.rev)||0; seenRev = serverRev;
+          lastRaw = JSON.stringify(db); cacheSave();
+          SYNC.lastErr = "ระบบกลางปฏิเสธการแก้ไขล่าสุด: " + SYNC.blocked.reasons.join(" | ");
+          if(meId) renderAll();
+          closeModal(); showBlockedModal();
+          return true;   // ข้อมูลในเครื่องตรงกับส่วนกลางแล้ว (การแก้ของเราถูกพักไว้ใน SYNC.blocked)
+        }
+        // มีคนบันทึกข้อมูลใหม่กว่าไปก่อน — รับของใหม่มาเป็นฐาน แล้วเติมรายการของเรากลับเข้าไป
+        const mine = out.data.saveTok && out.data.saveTok===db.saveTok;   // เป็นการบันทึกของเราเองที่ขึ้นไปแล้ว
         db = out.data; serverRev = Number(db.rev)||0; seenRev = serverRev;
         const n = pendReapply();
         lastRaw = JSON.stringify(db); cacheSave();
         if(meId) renderAll();
         if(n && i<2){ db.rev = serverRev + 1; continue; }   // ส่งซ้ำพร้อมรายการของเรา
-        if(out.blocked){
-          /* ระบบกลางกันไว้เพราะข้อมูลในเครื่องนี้เก่ากว่าของจริง — ดึงของจริงมาแสดงแทน */
-          SYNC.lastErr = "ระบบกลางป้องกันการเขียนทับ: " + (out.reasons||[]).join(" | ");
-          toast("⚠️ เครื่องนี้ถือข้อมูลเก่ากว่าระบบกลาง — ดึงข้อมูลล่าสุดมาให้แล้ว กรุณาตรวจแล้วทำรายการซ้ำ", true);
-          return true;
-        }
-        toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว");
+        if(!mine) toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว");
         return true;
       }
       SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธการบันทึก" + (out && out.error? " ("+out.error+")" : "") + " — ตรวจโค้ด Apps Script/ขนาดข้อมูล";
@@ -757,11 +813,17 @@ async function gasSave(){
   const reason = SYNC.lastErr;
   try{
     const chk = await gasLoad();
-    if(chk && (chk.rev||0) >= (db.rev||0)){
+    /* ต้องเทียบด้วย saveTok ไม่ใช่ rev — ถ้าเพื่อนได้ rev เดียวกันไปพอดี rev จะเท่ากันแต่ไม่ใช่ของเรา */
+    if(chk && chk.saveTok && chk.saveTok === db.saveTok){
       gasOK = true; SYNC.okAt = Date.now();
       serverRev = Number(chk.rev)||0; seenRev = serverRev;
       SYNC.lastErr = "ตอบกลับช้าเกิน แต่ข้อมูลขึ้นระบบกลางเรียบร้อยแล้ว";
       pendSync(); return true;
+    }
+    if(chk && remoteNewer(chk)){
+      /* ของเพื่อนขึ้นไปแทน — รับมาเป็นฐาน แล้วให้คิวค้างส่งจัดการต่อ */
+      db = chk; serverRev = Number(chk.rev)||0; seenRev = serverRev;
+      pendReapply(); lastRaw = JSON.stringify(db); cacheSave(); if(meId) renderAll();
     }
   }catch(e){}
   SYNC.lastErr = reason || SYNC.lastErr;
@@ -782,6 +844,10 @@ async function storeSave(){
   try{
     do{
       __saveAgain = false;
+      /* ⚠️ ต้องคำนวณ rev ใหม่ทุกรอบ — รอบก่อนหน้าเพิ่ง serverRev ขึ้นไปแล้ว
+         (ต้นเหตุ "ปฏิเสธ rev ไม่ใหม่กว่า" 61 ครั้งใน log และรายการที่กดติดกันหายเงียบ) */
+      db.rev = (serverRev>=0 ? serverRev : (Number(db.rev)||0)) + 1;
+      lastRaw = JSON.stringify(db); cacheSave();
       ok = await gasSave();          // 2) ส่งขึ้น Google Sheet (มี retry ในตัว)
       lastRaw = JSON.stringify(db); cacheSave();
     }while(__saveAgain);
@@ -794,7 +860,7 @@ async function storeSave(){
 }
 /* ส่งข้อมูลที่ค้างอยู่ในเครื่องขึ้นส่วนกลาง — เรียกอัตโนมัติทุกรอบดึงข้อมูล และตอนเน็ตกลับมา */
 async function flushPending(){
-  if(!SYNC.pending || __saving || !gasUrl()) return;
+  if(!SYNC.pending || __saving || !gasUrl() || SYNC.blocked) return;
   __saving = true;
   let ok = false;
   try{
@@ -834,12 +900,85 @@ function updateSyncBadge(){
   if(!el) return;
   el.onclick = openSyncInfo;
   el.style.cursor = "pointer";
-  if(gasUrl() && SYNC.pending){ el.style.display="block"; el.innerHTML="⏳ มีข้อมูลค้างส่ง — เก็บไว้ในเครื่องแล้ว จะส่งให้อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
+  const g = inputGate();
+  if(g && g.level==="stop"){
+    el.style.display="block"; el.style.background="rgba(255,92,92,.14)"; el.style.borderColor="rgba(255,92,92,.5)"; el.style.color="#ff8a8a";
+    el.innerHTML = g.msg + " • <u>แตะเพื่อแก้</u>";
+    el.onclick = SYNC.newerVer? showVerOverlay : SYNC.blocked? showBlockedModal : openSyncInfo;
+    return;
+  }
+  el.style.background=""; el.style.borderColor=""; el.style.color="";
+  if(g && g.level==="warn"){ el.style.display="block"; el.innerHTML = g.msg + " • <u>แตะดูรายละเอียด</u>"; }
+  else if(gasUrl() && SYNC.pending){ el.style.display="block"; el.innerHTML="⏳ มีข้อมูลค้างส่ง — เก็บไว้ในเครื่องแล้ว จะส่งให้อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
   else if(gasUrl() && gasOK){ el.style.display="none"; }
   else if(gasUrl() && !gasOK){ el.style.display="block"; el.innerHTML="⚠️ ซิงก์ไม่สำเร็จชั่วคราว — จะลองใหม่อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
   else if(storageOK){ el.style.display="none"; }
   else { el.style.display="block"; el.innerHTML="⚠️ โหมดทดลอง — <u>แตะดูรายละเอียด</u>"; }
 }
+
+/* ---------- แอปรุ่นเก่า: บังหน้าจอทั้งหมด ห้ามป้อนต่อ จนกว่าจะโหลดรุ่นใหม่ ---------- */
+function showVerOverlay(){
+  let el = document.getElementById("verOverlay");
+  if(!el){
+    el = document.createElement("div"); el.id = "verOverlay";
+    el.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(10,12,18,.94);display:flex;align-items:center;justify-content:center;padding:24px;";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="card" style="max-width:420px;width:100%;">
+    <h3>🔄 ต้องอัปเดตแอปก่อนใช้งานต่อ</h3>
+    <p style="margin:6px 0 10px;">เครื่องนี้ใช้แอปรุ่น <b>${APP_VER}</b> แต่เพื่อนในก๊วนใช้รุ่น <b>${esc(SYNC.newerVer||"ใหม่กว่า")}</b> แล้ว
+    การป้อนข้อมูลจากรุ่นเก่าอาจไปทับข้อมูลของทั้งก๊วน จึงขอให้โหลดรุ่นใหม่ก่อน</p>
+    <p class="muted" style="font-size:12.5px;margin-bottom:12px;">ถ้ากดปุ่มแล้วยังเห็นรุ่นเดิม: ปิดแอป/แท็บนี้ให้สนิท (ปัดออกจากรายการแอปล่าสุด) แล้วเปิดใหม่ หรือรอ 10 นาทีแล้วเปิดใหม่</p>
+    <button class="btn btn-lime btn-block" onclick="hardReload()">โหลดแอปรุ่นใหม่เดี๋ยวนี้</button>
+  </div>`;
+  el.style.display = "flex";
+}
+async function hardReload(){
+  try{ if(navigator.serviceWorker){ const rs = await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); } }catch(e){}
+  try{ if(window.caches){ const ks = await caches.keys(); for(const k of ks) await caches.delete(k); } }catch(e){}
+  location.replace(location.pathname + "?v=" + Date.now() + (location.hash||""));
+}
+/* ---------- ระบบกลางปฏิเสธการแก้ไขของเรา: อธิบาย + ให้ผู้จัดการเลือกทาง ---------- */
+function showBlockedModal(){
+  const b = SYNC.blocked; if(!b) return;
+  const mg = isAdmin() || isDefaultMgr() || (db.sessions||[]).some(s=>canManage(s));
+  modal(`
+    <div class="modal-head"><h3>⛔ ระบบกลางไม่รับการแก้ไขล่าสุด</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <p style="margin:4px 0 8px;">เหตุผลจากระบบกลาง:</p>
+    <ul style="margin:0 0 10px 18px;font-size:13px;">${(b.reasons||["ไม่ระบุ"]).map(r=>"<li>"+esc(r)+"</li>").join("")}</ul>
+    <p style="margin:0 0 8px;">ตอนนี้แอปได้ <b>ดึงข้อมูลจริงจากส่วนกลางมาแสดงแทนแล้ว</b> การแก้ไขของคุณถูกพักไว้ ยังไม่หายไปไหน</p>
+    <p class="muted" style="font-size:12.5px;margin-bottom:12px;">ส่วนใหญ่เกิดจากเครื่องนี้ถือข้อมูลเก่ากว่าเพื่อน ให้ตรวจข้อมูลที่แสดงอยู่ แล้วทำรายการที่ต้องการซ้ำอีกครั้ง
+    ${b.force? "" : " — ถ้าคุณเป็นผู้จัดการและ<b>ตั้งใจ</b>ให้ยอด/รายการลดลง (เช่น คืนค่าคิดยอดอัตโนมัติ) ให้กด \"ยืนยันส่งซ้ำ\""}</p>
+    <button class="btn btn-lime btn-block" style="margin-bottom:8px;" onclick="SYNC.blocked=null; updateSyncBadge(); closeModal(); toast('ใช้ข้อมูลจากส่วนกลางแล้ว — ทำรายการซ้ำได้')">ใช้ข้อมูลจากส่วนกลาง แล้วทำรายการซ้ำ</button>
+    ${mg && !b.force? `<button class="btn btn-ghost btn-block" onclick="forceResend()">ยืนยันส่งซ้ำแบบผู้จัดการ (ตั้งใจให้ลดลง)</button>` : ""}
+    ${b.force? `<p class="muted" style="font-size:12px;">การส่งแบบยืนยันถูกปฏิเสธ — Apps Script ฝั่งเซิร์ฟเวอร์ยังไม่รองรับคำสั่งยกเว้น (force) กรุณาอัปเดตโค้ด Apps Script ตามคู่มือรุ่น ${APP_VER}</p>` : ""}
+  `);
+}
+async function forceResend(){
+  const b = SYNC.blocked; if(!b || !b.raw) return;
+  if(!confirm("ยืนยันส่งการแก้ไขของคุณทับข้อมูลส่วนกลาง?\nใช้เฉพาะกรณีที่ตั้งใจให้ยอด/รายการลดลงจริง")) return;
+  let mine = null; try{ mine = JSON.parse(b.raw); }catch(e){ return toast("สำเนาที่พักไว้เสียหาย", true); }
+  db = mine; SYNC.blocked = null;
+  __forceNext = { reason:"manager-confirm", by:meId, at:Date.now() };
+  closeModal(); await storeSave(); renderAll(); updateSyncBadge();
+  if(!SYNC.blocked) toast("ส่งการแก้ไขขึ้นระบบกลางแล้ว");
+}
+/* ---------- เปิดแอปครั้งแรกบนเครื่องนี้แต่ติดต่อชีตไม่ได้: รอ ไม่สร้างข้อมูลปลอม ---------- */
+function renderConnecting(){
+  modal(`
+    <div class="modal-head"><h3>📡 กำลังเชื่อมต่อฐานข้อมูลก๊วน</h3></div>
+    <p style="margin:4px 0 8px;">เครื่องนี้ยังไม่มีสำเนาข้อมูล และติดต่อระบบกลางไม่ได้ในขณะนี้ (${esc(SYNC.lastErr||"ไม่ทราบสาเหตุ")})</p>
+    <p class="muted" style="font-size:12.5px;margin-bottom:12px;">แอปจะลองใหม่เองทุก 8 วินาที กรุณาตรวจอินเทอร์เน็ต หรือปิดแอปแล้วเปิดใหม่</p>
+    <button class="btn btn-lime btn-block" onclick="location.reload()">ลองใหม่เดี๋ยวนี้</button>
+  `);
+  clearTimeout(window.__connT);
+  window.__connT = setTimeout(async ()=>{
+    const r = await gasLoad();
+    if(r){ location.reload(); } else renderConnecting();
+  }, 8000);
+}
+/* ทบทวนแถบเตือนทุก 5 วิ (ความ "ค้าง" ของข้อมูลเปลี่ยนตามเวลา ไม่ใช่ตามเหตุการณ์) */
+setInterval(function(){ try{ if(meId || db) updateSyncBadge(); }catch(e){} }, 5000);
 
 /* popup รายละเอียดการเชื่อมต่อ + ตัวเลขวินิจฉัย (ขนาดข้อมูล / เวลาที่ใช้ / จำนวนครั้งที่ล้มเหลว) */
 function openSyncInfo(){
@@ -854,6 +993,9 @@ function openSyncInfo(){
     <div class="row" style="margin-bottom:6px;"><span class="muted">รูปสลิปที่ยังอยู่ในข้อมูล</span><b>${slips} รูป</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">เวลาซิงก์ครั้งล่าสุด</span><b>${SYNC.lastMs? SYNC.lastMs+" ms":"-"}</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">ล้มเหลวสะสม (อ่าน/บันทึก)</span><b>${SYNC.fails} / ${SYNC.saveFails}</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">rev ที่ยืนยันแล้ว / ที่เห็นบนชีต</span><b>${serverRev} / ${seenRev}</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">รายการค้างส่งในเครื่อง</span><b>${__pend.length} รายการ</b></div>
+    ${SYNC.lastErr? `<div class="row" style="margin-bottom:6px;"><span class="muted">ข้อความล่าสุด</span><b style="font-weight:600;font-size:12px;text-align:right;max-width:60%;">${esc(SYNC.lastErr)}</b></div>` : ""}
     <div class="row" style="margin-bottom:6px;"><span class="muted">สำเร็จครั้งล่าสุด</span><b>${SYNC.okAt? new Date(SYNC.okAt).toLocaleTimeString(loc(),{hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "-"}</b></div>
     ${SYNC.lastErr? `<div class="banner-warn" style="font-size:11.5px;">🔎 สาเหตุล่าสุด: ${esc(SYNC.lastErr)}</div>`:""}
     <div class="row" style="margin-bottom:10px;"><span class="muted">เวอร์ชันแอป</span><b>${APP_VER}</b></div>
@@ -889,9 +1031,10 @@ async function cleanSlipsAll(){
 async function retrySync(){
   toast("กำลังเชื่อมต่อ…");
   const remote = await gasLoad();
-  if(remote && (remote.rev||0) > (db.rev||0)){ db = remote; serverRev = Number(remote.rev)||0; seenRev = serverRev; pendReapply(); }
+  if(remoteNewer(remote)){ db = remote; serverRev = Number(remote.rev)||0; seenRev = serverRev; pendReapply(); }
   __pollFail = 0;
-  await storeSave();
+  if(remote) SYNC.bootStale = false;
+  if(__pend.length || !remote) await storeSave();   // ส่งเฉพาะเมื่อมีของเราค้างจริง ไม่เขียนทับเปล่าๆ
   updateSyncBadge(); if(meId) renderAll();
   closeModal();
   toast(gasOK? "☁️ เชื่อมต่อสำเร็จ ข้อมูลซิงก์แล้ว" : "ยังเชื่อมต่อไม่ได้ — ข้อมูลถูกเก็บในเครื่อง จะส่งให้เองอัตโนมัติ", !gasOK);
@@ -1601,7 +1744,28 @@ function toast(msg, err){
   el.textContent = t(msg); el.className = err? "show err":"show";
   clearTimeout(window.__tt); window.__tt = setTimeout(()=> el.className="", 2400);
 }
-function modal(html){ $("modalBody").innerHTML = html; translateDom($("modalBody")); $("modalBg").classList.add("show"); }
+function modal(html){
+  /* ก่อนเปิดฟอร์มใดๆ ถ้ามีข้อมูลใหม่จากเพื่อนพักไว้อยู่ ให้ใช้ก่อน — ฟอร์มจะได้เริ่มจากข้อมูลล่าสุด ไม่ใช่ของค้าง */
+  if(__pendingRemote && !modalOpen()){ const r = __pendingRemote; __pendingRemote = null; applyRemote(r); }
+  const g = inputGate();
+  const strip = g? `<div class="banner-warn" style="margin:-4px 0 10px; ${g.level==="stop"?"background:rgba(255,92,92,.14);border-color:rgba(255,92,92,.5);color:#ff8a8a;":""}">${g.msg}${g.level==="stop"?"":" • <u onclick=\"pollRemote();updateSyncBadge();\" style=\"cursor:pointer;\">อัปเดตเดี๋ยวนี้</u>"}</div>` : "";
+  $("modalBody").innerHTML = strip + html; translateDom($("modalBody")); $("modalBg").classList.add("show");
+}
+/* ---------- ด่านตรวจก่อนป้อนข้อมูล: บอกว่าตอนนี้ "ควรหยุดกดก่อน" หรือไม่ ----------
+   level "stop"  = ห้ามป้อนต่อจนกว่าจะแก้ (รุ่นเก่า / ระบบกลางปฏิเสธ / เปิดจากสำเนาเก่า)
+   level "warn"  = ป้อนได้แต่ควรรอให้ซิงก์กลับมาก่อน (ข้อมูลค้างนาน / ติดต่อไม่ได้) */
+function inputGate(){
+  if(!gasUrl()) return null;
+  const sinceOk = SYNC.okAt? Date.now()-SYNC.okAt : Infinity;
+  const playing = db && db.sessions && db.sessions.some(x=>x.status==="playing");
+  if(SYNC.newerVer) return { level:"stop", msg:"🔄 แอปในเครื่องนี้เป็นรุ่นเก่า ("+APP_VER+") เพื่อนใช้รุ่น "+SYNC.newerVer+" แล้ว — กรุณาปิดแอปแล้วเปิดใหม่ก่อนป้อนข้อมูล" };
+  if(SYNC.blocked) return { level:"stop", msg:"⛔ ระบบกลางไม่รับการแก้ไขล่าสุดของคุณ — อย่าป้อนต่อ แตะแถบด้านบนเพื่อดูวิธีแก้" };
+  if(SYNC.bootStale) return { level:"stop", msg:"📴 เปิดแอปจากสำเนาในเครื่อง ยังไม่ได้ข้อมูลล่าสุดจากก๊วน — รอให้เชื่อมต่อได้ก่อน หรือปิดแอปแล้วเปิดใหม่" };
+  if(__pollFail>=2 || (!gasOK && sinceOk > 30000)) return { level:"warn", msg:"⚠️ ติดต่อระบบกลางไม่ได้ "+Math.round(Math.min(sinceOk,9e6)/1000)+" วิ — รอให้แถบสถานะกลับเป็นปกติก่อนกดบันทึก มิฉะนั้นข้อมูลอาจไปทับของเพื่อน" };
+  if(sinceOk > (playing? STALE_PLAY_MS : STALE_IDLE_MS)) return { level:"warn", msg:"⏳ ข้อมูลในเครื่องอัปเดตล่าสุด "+Math.round(sinceOk/1000)+" วิที่แล้ว — กำลังดึงข้อมูลใหม่ รอสักครู่ก่อนกดต่อ" };
+  if(SYNC.pending) return { level:"warn", msg:"⏳ ยังมีรายการของคุณค้างส่ง — รอให้ส่งสำเร็จก่อนป้อนรายการถัดไป" };
+  return null;
+}
 function closeModal(){
   $("modalBg").classList.remove("show");
   // ระหว่างเปิดหน้าต่างอยู่ ถ้ามีข้อมูลใหม่จากเพื่อนเข้ามา จะพักไว้ก่อน — ปิดแล้วค่อยอัปเดตให้
@@ -3170,8 +3334,10 @@ async function unfreezeFees(sid){
     n++;
   });
   if(!n) return toast("นัดนี้ยังไม่มียอดที่ระบบตรึงไว้");
+  /* ตั้งใจให้ยอดตรึงหาย — แจ้งเซิร์ฟเวอร์ให้ยกเว้นกฎ "ข้อมูลลดลงผิดปกติ" สำหรับการบันทึกครั้งนี้ */
+  __forceNext = { reason:"unfreeze", sid:s.id, n, by:meId, at:now };
   await storeSave(); openAdjustPay(sid); renderAll();
-  toast("คืนค่าคิดยอดอัตโนมัติ "+n+" คนแล้ว");
+  if(!SYNC.blocked) toast("คืนค่าคิดยอดอัตโนมัติ "+n+" คนแล้ว");
 }
 function renderPaymentHtml(s){
   const split = costSplit(s);
@@ -3432,6 +3598,8 @@ async function togglePaid(sid, mid){
     }
     s.paid[mid] = false;
     if(s.payInfo) delete s.payInfo[mid];
+    if(!s.paidAt) s.paidAt = {}; s.paidAt[mid] = Date.now();
+    pendAdd("paid", { sid:s.id, mid, v:false, req:(s.payReq&&s.payReq[mid])||null, at:s.paidAt[mid] });
   } else {
     freezeFee(s, mid);   // นัดยังไม่จบ: ล็อกยอดคนนี้ไว้ตอนกดจ่าย
     s.paid[mid] = true;
@@ -3442,6 +3610,8 @@ async function togglePaid(sid, mid){
     else if(!s.payInfo[mid]) s.payInfo[mid] = { method:"manual", at:Date.now(), approvedBy:meId };
     if(s.payReq) delete s.payReq[mid];
     if(s.payNudge) delete s.payNudge[mid];
+    if(!s.paidAt) s.paidAt = {}; s.paidAt[mid] = Date.now();
+    pendAdd("paid", { sid:s.id, mid, v:true, info:s.payInfo[mid], at:s.paidAt[mid] });
   }
   await storeSave();
   modal(renderPaymentHtml(s)); renderAll();
@@ -3728,6 +3898,8 @@ async function approvePay(sid, mid){
   s.payInfo[mid] = Object.assign({ method:req.method, amountRead:req.amountRead!=null? req.amountRead:null, note:req.note||"", at:req.at, approvedBy:meId, approvedAt:Date.now() }, slipFields(req));
   delete s.payReq[mid];
   if(s.payNudge) delete s.payNudge[mid];
+  if(!s.paidAt) s.paidAt = {}; s.paidAt[mid] = Date.now();
+  pendAdd("paid", { sid:s.id, mid, v:true, info:s.payInfo[mid], at:s.paidAt[mid] });
   await storeSave(); renderAll(); openPayment(sid);
   toast("✅ อนุมัติแล้ว — "+nameOf(mid)+" จ่ายเรียบร้อย");
 }
@@ -4601,7 +4773,8 @@ document.addEventListener("visibilitychange", ()=>{
 });
 /* รับข้อมูลชุดใหม่จากส่วนกลางมาใช้ พร้อมเติมรายการของเราที่ยังไม่ขึ้นฐานกลางกลับเข้าไป */
 function applyRemote(remote){
-  if(!remote || (remote.rev||0) <= (db.rev||0)) return;
+  if(!remoteNewer(remote)) return;
+  checkVer(remote);
   db = remote; serverRev = Number(remote.rev)||0; seenRev = serverRev;
   const n = pendReapply();
   lastRaw = JSON.stringify(db); cacheSave();
@@ -4617,8 +4790,9 @@ async function pollRemote(){
     await flushPending();              // มีของค้างในเครื่อง → ส่งขึ้นก่อน
     const remote = await gasLoad();
     if(!remote){ if(!gasOK) __pollFail++; updateSyncBadge(); return; }
-    __pollFail = 0;
-    if((remote.rev||0) > (db.rev||0)){
+    __pollFail = 0; SYNC.bootStale = false;
+    checkVer(remote);
+    if(remoteNewer(remote)){
       if(modalOpen()) __pendingRemote = remote;
       else applyRemote(remote);
     }
@@ -4651,8 +4825,18 @@ async function init(){
          เพราะเครื่องที่ค้างส่งมานานจะมีข้อมูลเก่า แล้วลบงานของทั้งก๊วนทิ้ง
          ของที่เราค้างอยู่จะถูกเติมกลับทีละรายการผ่าน pendReapply() แทน */
       loaded = remote; fromRemote = true;
+      serverRev = seenRev = Number(remote.rev)||0;   // ฐานที่ยืนยันแล้ว — เดิมไม่ได้ตั้งค่า ทำให้ทุกรอบ poll ถูกมองว่าเป็นข้อมูลใหม่
     } else if(cached){
-      SYNC.pending = true;   // เน็ต/ชีตมีปัญหา — ใช้ของในเครื่องไปก่อน แล้วค่อยส่งทีหลัง
+      /* เน็ต/ชีตมีปัญหา — ใช้สำเนาในเครื่องไปก่อน "แบบอ่านอย่างเดียว"
+         ค้างส่งเฉพาะเมื่อมีรายการของเราในคิวจริง (เดิมตั้ง pending=true เสมอ ทำให้ดันสำเนาเก่าขึ้นไป) */
+      SYNC.pending = __pend.length > 0;
+      SYNC.bootStale = true;
+    } else {
+      /* ไม่มีทั้งชีตและสำเนาในเครื่อง — ห้ามสร้างข้อมูลตั้งต้นแล้วส่งขึ้นไป (เดิมส่ง rev 1 ไป 24 ครั้งใน log)
+         แสดงหน้ารอเชื่อมต่อ แล้วลองใหม่เอง */
+      window.__booting = false;
+      renderConnecting();
+      return;
     }
   }
   window.__booting = false;
