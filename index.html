@@ -390,7 +390,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.05d";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.05e";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -963,7 +963,7 @@ function healthIssues(){
   Object.keys(cl).forEach(id=>{
     const c = cl[id]; const row = Object.assign({ id }, c);
     row.isOld = !!(c.v && verCmp(c.v, APP_VER) < 0) || !c.v;
-    row.hasIssue = !!(c.issueAt && c.issueAt > cutIssue) || (c.bl||0) > 0;
+    row.hasIssue = !!(c.issueAt && c.issueAt > cutIssue);   // หมดอายุเองใน 48 ชม. (bl แสดงเป็นตัวเลขสะสมเท่านั้น)
     if(row.isOld) out.old.push(row);
     if(row.hasIssue) out.issues.push(row);
     out.rows.push(row);
@@ -979,9 +979,43 @@ function updateHealthBanner(){
   const parts = [];
   if(h.old.length)    parts.push("👴 " + h.old.length + " คนยังใช้แอปรุ่นเก่า");
   if(h.issues.length) parts.push("🩺 " + h.issues.length + " คนมีปัญหาการซิงก์ใน " + HEALTH_ISSUE_HOURS + " ชม.");
-  if(!parts.length){ el.style.display = "none"; return; }
+  if(!parts.length){ el.style.display = "none"; lsDel(HEALTH_ACK_LS); return; }
+  /* Admin กด "รับทราบ" แล้ว → ซ่อนจนกว่าชุดปัญหาจะเปลี่ยน (คนใหม่/รุ่นใหม่/เหตุใหม่) */
+  if(lsGet(HEALTH_ACK_LS) === healthKey(h)){ el.style.display = "none"; return; }
   el.style.display = "block";
   el.innerHTML = "🛠️ <b>Admin:</b> " + parts.join(" • ") + " — <u>แตะดูรายชื่อและแจ้งเตือน</u>";
+}
+const HEALTH_ACK_LS = "smash-health-ack";
+function healthKey(h){
+  return [].concat(h.old.map(r=>"o:"+r.id+":"+(r.v||"")), h.issues.map(r=>"i:"+r.id+":"+(r.issueAt||0))).sort().join("|");
+}
+function ackHealth(){ lsSet(HEALTH_ACK_LS, healthKey(healthIssues())); updateHealthBanner(); closeModal(); toast("รับทราบแล้ว — จะเตือนใหม่เมื่อมีปัญหาชุดใหม่"); }
+/* ข้อความแจ้งเตือน (ใช้ทั้งโพสต์กระดานและคัดลอกไปไลน์) */
+function healthNoticeText(forLine){
+  const h = healthIssues();
+  const oldNames = h.old.map(r=>r.n||nameOf(r.id));
+  const issNames = h.issues.filter(r=>!r.isOld).map(r=>r.n||nameOf(r.id));
+  const nl = forLine? "\n" : " ";
+  let t = forLine? "📢 แจ้งจาก Admin ก๊วน Smash Badminton" + nl + nl : "📢 แจ้งจาก Admin: ";
+  if(oldNames.length) t += "แอปของ " + oldNames.join(", ") + " ยังเป็นรุ่นเก่า" + nl + "กรุณาปิดแอปให้สนิท (ปัดออกจากรายการแอปล่าสุด) แล้วเปิดใหม่ ให้เห็นเวอร์ชัน " + APP_VER + " ใต้ชื่อแอป" + nl;
+  if(issNames.length) t += (oldNames.length? nl : "") + issNames.join(", ") + " เครื่องมีปัญหาซิงก์" + nl + "ถ้าเห็นแถบเหลือง/แดงด้านบน ให้รอสักครู่หรือปิดเปิดแอปใหม่ก่อนป้อนข้อมูลต่อ";
+  if(forLine) t += nl + nl + "เปิดแอป: " + location.origin + location.pathname;
+  return t;
+}
+async function copyHealthNotice(){
+  const t = healthNoticeText(true);
+  try{ await navigator.clipboard.writeText(t); toast("คัดลอกแล้ว — วางในไลน์ได้เลย 📋"); }
+  catch(e){
+    /* iOS/เบราว์เซอร์เก่า: แสดงกล่องให้กดค้างคัดลอกเอง */
+    modal(`<div class="modal-head"><h3>📋 คัดลอกข้อความ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+      <p class="muted" style="font-size:12px;">กดค้างในกล่องแล้วเลือก "คัดลอก"</p>
+      <textarea readonly style="width:100%; min-height:180px; font-size:13px;" onclick="this.select()">${esc(t)}</textarea>`);
+  }
+}
+async function clearClientIssue(id){
+  if(!canSeeHealth() || !db.clients || !db.clients[id]) return;
+  delete db.clients[id].issue; delete db.clients[id].issueAt; db.clients[id].bl = 0;
+  await storeSave(); openClientHealth(); toast("ล้างเหตุของ " + nameOf(id) + " แล้ว");
 }
 function fmtAgo(t){
   if(!t) return "-";
@@ -998,7 +1032,7 @@ function openClientHealth(){
       <td style="white-space:nowrap; color:${r.isOld? "var(--amber)" : "var(--lime)"};">${esc(r.v||"ก่อน 09.05a")}${r.isOld? " ⚠️":""}</td>
       <td style="white-space:nowrap;">${fmtAgo(r.at)}</td>
       <td style="text-align:center;">${(r.sf||0)}/${(r.rf||0)}/${(r.bl||0)}</td>
-      <td style="font-size:11.5px;">${r.issue? esc(r.issue) + `<div class="muted" style="font-size:10.5px;">${fmtAgo(r.issueAt)}ที่แล้ว</div>` : '<span class="muted">-</span>'}</td>
+      <td style="font-size:11.5px;">${r.issue? esc(r.issue) + `<div class="muted" style="font-size:10.5px;">${fmtAgo(r.issueAt)}ที่แล้ว • <u style="cursor:pointer;" onclick="clearClientIssue('${r.id}')">ล้าง</u></div>` : '<span class="muted">-</span>'}</td>
     </tr>`).join("");
   modal(`
     <div class="modal-head"><h3>🩺 สุขภาพเครื่องสมาชิก</h3><button class="mclose" onclick="closeModal()">✕</button></div>
@@ -1014,19 +1048,20 @@ function openClientHealth(){
       <thead><tr style="position:sticky; top:0; background:var(--card2);"><th style="text-align:left; padding:8px;">สมาชิก</th><th style="text-align:left; padding:8px;">รุ่นแอป</th><th style="text-align:left; padding:8px;">บันทึกล่าสุด</th><th style="padding:8px;">ล้มเหลว</th><th style="text-align:left; padding:8px;">เหตุล่าสุด</th></tr></thead>
       <tbody>${rows.replace(/<td/g,'<td style="padding:7px 8px; border-top:1px solid var(--line); vertical-align:top;"')||'<tr><td colspan="5" class="muted" style="padding:12px;">ยังไม่มีข้อมูล — จะเริ่มมีเมื่อสมาชิกใช้แอปรุ่น 2026.09.05b ขึ้นไปบันทึกครั้งแรก</td></tr>'}</tbody>
     </table></div>
-    ${(h.old.length||h.issues.length)? `<button class="btn btn-lime btn-block" style="margin-top:12px;" onclick="postHealthNotice()">📢 โพสต์ประกาศเตือนขึ้นกระดาน (ระบุชื่อ)</button>` : ""}
+    ${(h.old.length||h.issues.length)? `
+      <div class="frow" style="margin-top:12px; gap:8px;">
+        <button class="btn btn-lime btn-sm" style="flex:1;" onclick="postHealthNotice()">📢 โพสต์ขึ้นกระดาน</button>
+        <button class="btn btn-lime btn-sm" style="flex:1;" onclick="copyHealthNotice()">📋 คัดลอกส่งไลน์</button>
+      </div>
+      <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px;" onclick="ackHealth()">✓ รับทราบแล้ว ซ่อนแถบเตือนชุดนี้ (จะเตือนใหม่เมื่อมีปัญหาชุดใหม่)</button>` : ""}
+    <p class="muted" style="font-size:11.5px; margin-top:10px;">แถบเตือนหายเองเมื่อ: คนที่ใช้รุ่นเก่า<b>บันทึกอะไรก็ได้</b>ด้วยแอปรุ่นใหม่ • เหตุซิงก์ผิดปกติผ่านไป ${HEALTH_ISSUE_HOURS} ชม. • หรือ Admin กด "ล้าง" ที่รายการนั้น</p>
     <p class="muted" style="font-size:11.5px; margin-top:10px;">ฝั่งเซิร์ฟเวอร์: แท็บ ChangeLog ในชีตบันทึกรุ่นแอปท้ายชื่อผู้บันทึกทุกครั้ง และเมื่อพร้อมให้ตั้ง MIN_APP_VER ใน Apps Script เพื่อกั้นรุ่นเก่าไม่ให้เขียน</p>
   `);
 }
 /* Admin กดปุ่มเดียว: สร้างประกาศบนกระดาน ระบุชื่อคนที่ต้องอัปเดต/มีปัญหา พร้อมวิธีแก้ */
 async function postHealthNotice(){
   if(!canSeeHealth()) return;
-  const h = healthIssues();
-  const oldNames = h.old.map(r=>r.n||nameOf(r.id));
-  const issNames = h.issues.filter(r=>!r.isOld).map(r=>r.n||nameOf(r.id));
-  let text = "📢 แจ้งจาก Admin: ";
-  if(oldNames.length) text += "แอปของ " + oldNames.join(", ") + " ยังเป็นรุ่นเก่า กรุณาปิดแอปให้สนิท (ปัดออกจากรายการแอปล่าสุด) แล้วเปิดใหม่ ให้เห็นเวอร์ชัน " + APP_VER + " ใต้ชื่อแอป ";
-  if(issNames.length) text += (oldNames.length? "• " : "") + issNames.join(", ") + " เครื่องมีปัญหาซิงก์ ถ้าเห็นแถบเหลือง/แดงด้านบน ให้รอสักครู่หรือปิดเปิดแอปใหม่ก่อนป้อนข้อมูลต่อ";
+  const text = healthNoticeText(false);
   if(!confirm("โพสต์ประกาศนี้ขึ้นกระดาน?\n\n" + text)) return;
   db.board = db.board||[];
   const bmsg = { id:uid(), from:meId, text:text.slice(0,300), at:Date.now(), type:"ann" };
