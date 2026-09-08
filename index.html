@@ -390,7 +390,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.05e";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.05f";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -748,12 +748,12 @@ function pruneSlips(days){
 /* knownRev: ส่ง rev ที่เครื่องนี้ยืนยันแล้วไปด้วย — ถ้าชีตยังอยู่ rev เดิม เซิร์ฟเวอร์ (รุ่น 05c ขึ้นไป) จะตอบสั้นๆ
    {same:true} ~60 ไบต์ แทนข้อมูลทั้งก้อน ~600 KB → poll ทุก 6 วินาทีตอนกำลังตีจึงแทบไม่กินเน็ต
    คืนค่า: object ข้อมูล | "same" | null(ล้มเหลว) — ผู้เรียกที่ไม่ส่ง knownRev จะไม่ได้ "same" เลย */
-async function gasLoad(knownRev){
+async function gasLoad(knownRev, timeoutMs){
   const url = gasUrl(); if(!url) return null;
   const t0 = Date.now();
   try{
     const q = "api=1&k=" + encodeURIComponent(clubKey()) + (knownRev!=null && knownRev>=0 ? "&rev=" + knownRev : "");
-    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q, {method:"GET"}, NET_GET_MS);
+    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q, {method:"GET"}, timeoutMs || NET_GET_MS);
     const txt = await res.text();
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = txt.length;
     const out = JSON.parse(txt);
@@ -820,7 +820,10 @@ async function gasSave(){
         lastRaw = JSON.stringify(db); cacheSave();
         if(meId) renderAll();
         if(n && i<2){ db.rev = serverRev + 1; continue; }   // ส่งซ้ำพร้อมรายการของเรา
-        if(!mine){ if(!n) noteIssue("ข้อมูลชนกับเพื่อน (rev " + serverRev + ") ไม่มีรายการในคิวกู้คืน"); toast(n? "รวมข้อมูลกับของเพื่อนในก๊วนแล้ว" : "มีข้อมูลใหม่กว่าจากเพื่อนในก๊วน — อัปเดตให้แล้ว"); }
+        if(!mine){
+          if(!n){ noteIssue("ข้อมูลชนกับเพื่อน (rev " + serverRev + ") ไม่มีรายการในคิวกู้คืน"); toast("⚠️ เพื่อนบันทึกพร้อมกันพอดี — รับข้อมูลของเพื่อนมาแล้ว กรุณาตรวจว่ารายการที่คุณเพิ่งทำยังอยู่ ถ้าไม่อยู่ให้ทำซ้ำ", true); }
+          else toast("รวมข้อมูลกับของเพื่อนในก๊วนแล้ว");
+        }
         return true;
       }
       SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธการบันทึก" + (out && out.error? " ("+out.error+")" : "") + " — ตรวจโค้ด Apps Script/ขนาดข้อมูล";
@@ -943,6 +946,14 @@ function updateSyncBadge(){
                            rf:อ่านล้มเหลวสะสม, bl:ถูกปฏิเสธ, issue:เหตุผิดปกติล่าสุด, issueAt }
    Admin/ผู้จัดการเห็นทั้งตารางจากปุ่มในหน้าสถานะการเชื่อมต่อ และมีแถบเตือนบนหน้าแรกเมื่อพบปัญหา */
 const HEALTH_KEEP_DAYS = 30, HEALTH_ISSUE_HOURS = 48;
+function deviceLabel(){
+  const ua = navigator.userAgent||"";
+  const m = /\(([^)]*)\)/.exec(ua); let os = m? m[1] : "";
+  os = os.replace(/^Linux; /,"").replace(/ Build\/.*$/,"").replace(/Macintosh; Intel Mac OS X [\d_]+/,"Mac").replace(/Windows NT 10\.0.*/,"Windows").replace(/iPhone; CPU iPhone OS ([\d_]+).*/,"iPhone iOS $1").replace(/_/g,".");
+  const br = /Line\//.test(ua)? "LINE" : /Safari/.test(ua) && !/Chrome|CriOS/.test(ua)? "Safari" : /Chrome|CriOS/.test(ua)? "Chrome" : "";
+  const pwa = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone ? " (แอป)" : "";
+  return (os + " " + br + pwa).trim().slice(0,60);
+}
 function healthStamp(){
   if(!meId || !db) return;
   if(!db.clients) db.clients = {};
@@ -950,7 +961,7 @@ function healthStamp(){
   c.n = nameOf(meId); c.v = APP_VER; c.at = Date.now(); c.ok = SYNC.okAt || 0;
   c.sf = SYNC.saveFails; c.rf = SYNC.fails; c.bl = (c.bl||0) + SYNC.blockedCount; SYNC.blockedCount = 0;
   if(SYNC.lastIssue){ c.issue = SYNC.lastIssue.msg; c.issueAt = SYNC.lastIssue.at; SYNC.lastIssue = null; }
-  c.ua = (navigator.userAgent||"").replace(/.*\((.*?)\).*/, "$1").slice(0,60);   // รุ่นเครื่อง/OS แบบย่อ ไว้ช่วยวินิจฉัย
+  c.ua = deviceLabel();   // รุ่นเครื่อง/OS แบบย่อ ไว้ช่วยวินิจฉัย
   db.clients[meId] = c;
   const cut = Date.now() - HEALTH_KEEP_DAYS*86400000;
   Object.keys(db.clients).forEach(k=>{ if((db.clients[k].at||0) < cut) delete db.clients[k]; });
@@ -1132,7 +1143,17 @@ function renderConnecting(){
   }, 8000);
 }
 /* ทบทวนแถบเตือนทุก 5 วิ (ความ "ค้าง" ของข้อมูลเปลี่ยนตามเวลา ไม่ใช่ตามเหตุการณ์) */
-setInterval(function(){ try{ if(meId || db) updateSyncBadge(); }catch(e){} }, 5000);
+setInterval(function(){ try{ if(meId || db) updateSyncBadge(); selfStampIfOutdated(); }catch(e){} }, 5000);
+/* ถ้าเครื่องนี้เพิ่งอัปเดตรุ่น แต่สถานะที่ Admin เห็นยังเป็นรุ่นเก่า → บันทึกสถานะใหม่ให้เอง 1 ครั้ง
+   (เขียน 1 ครั้งต่อเครื่องต่อรุ่น — น้อยกว่าการเล่นหนึ่งนัดหลายสิบเท่า) เพื่อให้แถบเตือน Admin หายเองแม้คนนั้นยังไม่ได้ทำรายการ */
+let __selfStamped = false;
+async function selfStampIfOutdated(){
+  if(__selfStamped || !meId || !db || !gasUrl() || !gasOK || __saving || SYNC.pending || SYNC.blocked || SYNC.bootStale) return;
+  const c = db.clients && db.clients[meId]; if(!c) return;          // ไม่เคยถูกบันทึกสถานะ → รอให้เกิดจากการทำรายการปกติ
+  if(verCmp(c.v||"", APP_VER) >= 0) return;
+  __selfStamped = true;
+  await storeSave();
+}
 
 /* popup รายละเอียดการเชื่อมต่อ + ตัวเลขวินิจฉัย (ขนาดข้อมูล / เวลาที่ใช้ / จำนวนครั้งที่ล้มเหลว) */
 function openSyncInfo(){
@@ -1160,11 +1181,39 @@ function openSyncInfo(){
     <p class="muted" style="margin-top:0; font-size:12px;">แอปบันทึกลงเครื่องก่อนเสมอ แล้วส่งขึ้น Google Sheet ให้อัตโนมัติ (ลองซ้ำเองเมื่อไม่สำเร็จ) และดึงข้อมูลใหม่จากเพื่อนทุก 6 วินาทีขณะกำลังตี / 20 วินาทีในเวลาปกติ • รูปสลิปของนัดที่จบเกิน ${SLIP_KEEP_DAYS} วันจะถูกตัดออกอัตโนมัติเพื่อให้ซิงก์เร็ว (ยอดเงินและผู้อนุมัติยังอยู่ครบ)
     ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ต แล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างจะถูกส่งให้เองไม่หายไปไหน"}</p>
     <button class="btn btn-lime btn-block" onclick="retrySync()">🔄 ลองเชื่อมต่อใหม่</button>
+    ${mg && embeddedSlips().length? `<div style="height:8px;"></div><button class="btn btn-lime btn-block" onclick="migrateSlipsToDrive()">☁️ ย้ายสลิปที่ฝังอยู่ ${embeddedSlips().length} รูปขึ้น Drive (ลดข้อมูลได้มากที่สุด)</button>`:""}
     ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="cleanSlipsNow()">🧹 ลดขนาดข้อมูล (ตัดรูปสลิปเก่ากว่า ${SLIP_KEEP_DAYS} วัน)</button>`:""}
     ${mg && slips? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="cleanSlipsAll()">🧹 ตัดรูปสลิป<b>ทั้งหมด</b>ของนัดที่จบแล้ว (${slips} รูป)</button>`:""}
     ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="closeModal(); openGasSetup();">⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)</button>`:""}
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+}
+/* สลิปที่ยังฝัง base64 อยู่ (อัปโหลด Drive ไม่สำเร็จตอนแจ้ง) */
+function embeddedSlips(){
+  const out = [];
+  (db.sessions||[]).forEach(s=>{
+    ["payInfo","payReq"].forEach(k=>{
+      Object.keys(s[k]||{}).forEach(mid=>{ const v = s[k][mid]; if(v && v.slip && !v.slipUrl) out.push({ s, k, mid, v }); });
+    });
+  });
+  return out;
+}
+/* ย้ายสลิปที่ฝังอยู่ขึ้น Drive แล้วลบสำเนา base64 ออกจากฐานข้อมูล — ลดขนาดข้อมูลที่รับส่งทุกครั้งได้เกือบทั้งหมด */
+async function migrateSlipsToDrive(){
+  if(!(isAdmin()||isDefaultMgr())) return;
+  if(!slipUploadUrl()) return toast("ยังไม่ได้ตั้งค่า URL อัปโหลดสลิป (Drive) ในหน้าตั้งค่า", true);
+  const list = embeddedSlips();
+  if(!list.length) return toast("ไม่มีสลิปที่ฝังอยู่ในข้อมูลแล้ว");
+  toast("กำลังย้ายสลิป " + list.length + " รูปขึ้น Drive…");
+  let ok = 0, fail = 0;
+  for(const it of list){
+    const up = await uploadSlipToDrive(it.v.slip, "slip-" + it.s.date + "-" + nameOf(it.mid));
+    if(up){ it.v.slipUrl = up.slipUrl; it.v.slipId = up.slipId; it.v.slip = null; ok++; }
+    else fail++;
+  }
+  if(ok){ await storeSave(); }
+  toast(ok? ("☁️ ย้ายสลิปขึ้น Drive แล้ว " + ok + " รูป" + (fail? " (ไม่สำเร็จ " + fail + ")":"") + " — ข้อมูลเหลือ " + fmtKB(dbBytes())) : "อัปโหลดขึ้น Drive ไม่สำเร็จ ตรวจ URL อัปโหลดสลิป", !ok);
+  openSyncInfo();
 }
 async function cleanSlipsNow(){
   if(!(isAdmin()||isDefaultMgr())) return;
@@ -4978,7 +5027,8 @@ async function init(){
   const cached = cacheLoad();
   let loaded = cached, fromRemote = false;
   if(gasUrl()){
-    const remote = await gasLoad();
+    /* ตอนบูตต้องโหลดทั้งก้อน — ให้เวลานานกว่า poll ปกติ (มือถือช้า + ข้อมูลใหญ่ เป็นเหตุ "หมดเวลารอ >15 วิ" ที่ Admin เห็น) */
+    const remote = await gasLoad(null, 40000);
     if(remote){
       /* ⚠️ กติกาสำคัญ: ข้อมูลของส่วนกลางคือ "ฐาน" เสมอ ห้ามเอาสำเนาในเครื่องไปทับ
          เพราะเครื่องที่ค้างส่งมานานจะมีข้อมูลเก่า แล้วลบงานของทั้งก๊วนทิ้ง
