@@ -390,7 +390,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.05f";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.05g";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -638,6 +638,10 @@ function pendPresent(p){
       const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return true;
       return (Number((s.paidAt||{})[p.payload.mid])||0) >= p.payload.at;
     }
+    if(p.kind==="slipurl"){
+      const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return true;
+      const v = (s[p.payload.k]||{})[p.payload.mid]; return !v || !!v.slipUrl || !v.slip;
+    }
   }catch(e){}
   return true;
 }
@@ -700,6 +704,11 @@ function pendReapply(){
           if(p.payload.v==null) delete a.feeOverride; else a.feeOverride = p.payload.v;
           a.feeAt = p.payload.at; n++;
         }
+      } else if(p.kind==="slipurl"){
+        /* ผลการย้ายสลิปขึ้น Drive — ต้องรอดแม้ชนกับการบันทึกของเพื่อน (8 ก.ย. 69 การย้ายรอบแรกหายเพราะชนพอดี) */
+        const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
+        const v = (s[p.payload.k]||{})[p.payload.mid]; if(!v || v.slipUrl) return;
+        v.slipUrl = p.payload.url; v.slipId = p.payload.id||null; v.slip = null; n++;
       } else if(p.kind==="paid"){
         /* สถานะ "จ่ายแล้ว/ยกเลิก" — เดิมไม่มีคิวกู้คืน ผู้จัดการกดจ่ายให้เพื่อนแล้วหายบ่อยเมื่อชนกับคนอื่น */
         const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
@@ -1202,14 +1211,22 @@ function embeddedSlips(){
 async function migrateSlipsToDrive(){
   if(!(isAdmin()||isDefaultMgr())) return;
   if(!slipUploadUrl()) return toast("ยังไม่ได้ตั้งค่า URL อัปโหลดสลิป (Drive) ในหน้าตั้งค่า", true);
+  /* ต้องซิงก์กับส่วนกลางอยู่จริงก่อน — ถ้าเครื่องถือสำเนาเก่า ผลการย้ายจะแพ้ rev ของเพื่อนแล้วหายไป */
+  if(!gasOK || serverRev < 0 || SYNC.bootStale || SYNC.pending || SYNC.blocked){
+    return toast("ยังไม่ได้เชื่อมต่อส่วนกลางสมบูรณ์ — กด \"ลองเชื่อมต่อใหม่\" ให้ rev ที่ยืนยันแล้วขึ้นตัวเลขก่อน แล้วค่อยย้ายสลิป", true);
+  }
+  const fresh = await gasLoad();   // ดึงข้อมูลล่าสุดมาเป็นฐานก่อนเสมอ
+  if(fresh && fresh!=="same" && remoteNewer(fresh)){ db = fresh; serverRev = Number(fresh.rev)||0; seenRev = serverRev; pendReapply(); lastRaw = JSON.stringify(db); cacheSave(); }
   const list = embeddedSlips();
   if(!list.length) return toast("ไม่มีสลิปที่ฝังอยู่ในข้อมูลแล้ว");
   toast("กำลังย้ายสลิป " + list.length + " รูปขึ้น Drive…");
   let ok = 0, fail = 0;
   for(const it of list){
     const up = await uploadSlipToDrive(it.v.slip, "slip-" + it.s.date + "-" + nameOf(it.mid));
-    if(up){ it.v.slipUrl = up.slipUrl; it.v.slipId = up.slipId; it.v.slip = null; ok++; }
-    else fail++;
+    if(up){
+      it.v.slipUrl = up.slipUrl; it.v.slipId = up.slipId; it.v.slip = null; ok++;
+      pendAdd("slipurl", { sid:it.s.id, k:it.k, mid:it.mid, url:up.slipUrl, id:up.slipId });   // รอดแม้ชนกับเพื่อน
+    } else fail++;
   }
   if(ok){ await storeSave(); }
   toast(ok? ("☁️ ย้ายสลิปขึ้น Drive แล้ว " + ok + " รูป" + (fail? " (ไม่สำเร็จ " + fail + ")":"") + " — ข้อมูลเหลือ " + fmtKB(dbBytes())) : "อัปโหลดขึ้น Drive ไม่สำเร็จ ตรวจ URL อัปโหลดสลิป", !ok);
