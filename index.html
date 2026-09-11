@@ -390,7 +390,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.05g";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.11a";   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -552,7 +552,10 @@ const CACHE_LS = "smash-db-cache";   // สำเนาข้อมูลล่�
 const PEND_LS  = "smash-pending";    // รายการที่ "เรา" เพิ่งเพิ่ม แต่ยังไม่ยืนยันว่าขึ้นฐานกลางแล้ว
 /* timeout: การเขียนต้องเผื่อเวลามาก เพราะ Apps Script ต้องเขียน Google Sheet ทั้งก้อน
    (ตั้งสั้นเกินไปจะรายงานว่า "ไม่สำเร็จ" ทั้งที่ฝั่งเซิร์ฟเวอร์บันทึกเสร็จแล้ว) */
-const NET_GET_MS = 15000, NET_POST_MS = 45000;
+const NET_GET_MS = 25000, NET_POST_MS = 45000, NET_BOOT_MS = 40000;   // [11a] 15→25 วิ: มือถือผ่าน LINE ใช้ 2–3 เท่าของเดสก์ท็อป (5.8 วิ) จึงคร่อมเส้น 15 วิพอดี
+/* [11a] "ผิดพลาดแบบอ่อน": poll พื้นหลังล้มเหลวครั้งเดียวขณะที่เพิ่งซิงก์สำเร็จไม่นาน — ไม่ต้องเตือนผู้ใช้ (ลองใหม่เองอยู่แล้ว) */
+const SOFT_FAIL_MS = 60000;
+function softFail(){ return !gasOK && __pollFail < 2 && SYNC.okAt && (Date.now()-SYNC.okAt) < SOFT_FAIL_MS && !SYNC.pending; }
 const SLIP_KEEP_DAYS = 30;           // เก็บรูปสลิปของนัดที่จบแล้ว 30 วัน แล้วตัดออกเพื่อคุมขนาดข้อมูล
 
 function gasUrl(){
@@ -757,12 +760,14 @@ function pruneSlips(days){
 /* knownRev: ส่ง rev ที่เครื่องนี้ยืนยันแล้วไปด้วย — ถ้าชีตยังอยู่ rev เดิม เซิร์ฟเวอร์ (รุ่น 05c ขึ้นไป) จะตอบสั้นๆ
    {same:true} ~60 ไบต์ แทนข้อมูลทั้งก้อน ~600 KB → poll ทุก 6 วินาทีตอนกำลังตีจึงแทบไม่กินเน็ต
    คืนค่า: object ข้อมูล | "same" | null(ล้มเหลว) — ผู้เรียกที่ไม่ส่ง knownRev จะไม่ได้ "same" เลย */
-async function gasLoad(knownRev, timeoutMs){
+async function gasLoad(knownRev, timeoutMs, knownTok){
   const url = gasUrl(); if(!url) return null;
   const t0 = Date.now();
+  const tmo = timeoutMs || NET_GET_MS;
   try{
-    const q = "api=1&k=" + encodeURIComponent(clubKey()) + (knownRev!=null && knownRev>=0 ? "&rev=" + knownRev : "");
-    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q, {method:"GET"}, timeoutMs || NET_GET_MS);
+    /* [11a] ส่ง tok (saveTok) ไปด้วย — เซิร์ฟเวอร์ 11a จะตอบ same เฉพาะเมื่อ rev และ tok ตรงทั้งคู่ (เซิร์ฟเวอร์รุ่นก่อนเพิกเฉย tok) */
+    const q = "api=1&k=" + encodeURIComponent(clubKey()) + (knownRev!=null && knownRev>=0 ? "&rev=" + knownRev + (knownTok? "&tok=" + encodeURIComponent(knownTok) : "") : "");
+    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q, {method:"GET"}, tmo);
     const txt = await res.text();
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = txt.length;
     const out = JSON.parse(txt);
@@ -782,7 +787,7 @@ async function gasLoad(knownRev, timeoutMs){
       return null;
     }
     SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธคำขออ่าน" + (out && out.error? " ("+out.error+")" : "");
-  }catch(e){ SYNC.fails++; SYNC.lastErr = netErr(e, NET_GET_MS); }
+  }catch(e){ SYNC.fails++; SYNC.lastErr = netErr(e, tmo); }   // [11a] แสดงเวลาที่รอจริง (เดิมขึ้น ">15 วิ" ทั้งที่ตอนบูตรอ 40 วิ)
   gasOK = false; return null;
 }
 async function gasSave(){
@@ -923,6 +928,7 @@ window.addEventListener("online", function(){ flushPending(); pollRemote(); });
 function syncLabel(){
   if(gasUrl() && gasOK && !SYNC.pending) return "☁️ Google Sheet (อัตโนมัติ)";
   if(gasUrl() && SYNC.pending) return "⏳ มีข้อมูลค้างส่ง — เก็บไว้ในเครื่องแล้ว";
+  if(gasUrl() && !gasOK && softFail()) return "☁️ Google Sheet (พลาด 1 ครั้ง กำลังลองใหม่)";
   if(gasUrl() && !gasOK) return "⚠️ Google Sheet — เชื่อมต่อไม่ได้";
   if(storageOK) return "💾 เก็บในเครื่องนี้เท่านั้น (ไม่แชร์กับเพื่อน)";
   return "🚫 โหมดทดลอง";
@@ -944,7 +950,7 @@ function updateSyncBadge(){
   el.style.background=""; el.style.borderColor=""; el.style.color="";
   if(g && g.level==="warn"){ el.style.display="block"; el.innerHTML = g.msg + " • <u>แตะดูรายละเอียด</u>"; }
   else if(gasUrl() && SYNC.pending){ el.style.display="block"; el.innerHTML="⏳ มีข้อมูลค้างส่ง — เก็บไว้ในเครื่องแล้ว จะส่งให้อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
-  else if(gasUrl() && gasOK){ el.style.display="none"; }
+  else if(gasUrl() && (gasOK || softFail())){ el.style.display="none"; }   // [11a] พลาดครั้งเดียวหลังเพิ่งสำเร็จ → ไม่รบกวนผู้ใช้
   else if(gasUrl() && !gasOK){ el.style.display="block"; el.innerHTML="⚠️ ซิงก์ไม่สำเร็จชั่วคราว — จะลองใหม่อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
   else if(storageOK){ el.style.display="none"; }
   else { el.style.display="block"; el.innerHTML="⚠️ โหมดทดลอง — <u>แตะดูรายละเอียด</u>"; }
@@ -1185,7 +1191,7 @@ function openSyncInfo(){
     ${SYNC.lastErr? `<div class="banner-warn" style="font-size:11.5px;">🔎 สาเหตุล่าสุด: ${esc(SYNC.lastErr)}</div>`:""}
     <div class="row" style="margin-bottom:10px;"><span class="muted">เวอร์ชันแอป</span><b>${APP_VER}</b></div>
     ${size>4000000? `<div class="banner-warn" style="font-size:11.5px;">⚠️ ข้อมูลใหญ่เกิน 4 MB — ใกล้ขีดจำกัดขนาดคำขอของ Apps Script (ราว 50 MB) และชีตจะมีมากกว่า 90 เซลล์ต่อสำเนา ควรตัดสลิป/นัดเก่าออก</div>`:""}
-    <div class="muted" style="font-size:11px; margin:-2px 0 8px;">ฝั่งชีตตัดข้อมูลเป็นก้อนละ 45,000 ตัวอักษรต่อเซลล์อัตโนมัติ (ตอนนี้ ${Math.ceil(size/45000)} เซลล์) จึงไม่ติดเพดาน 50,000 ตัวอักษรต่อเซลล์ของ Google Sheet</div>
+    <div class="muted" style="font-size:11px; margin:-2px 0 8px;">ฝั่งชีตตัดข้อมูลเป็นก้อนละ 45,000 ตัวอักษรต่อเซลล์อัตโนมัติ (ตอนนี้ ${Math.ceil(size/45000)} เซลล์) จึงไม่ติดเพดาน 50,000 ตัวอักษรต่อเซลล์ของ Google Sheet • รออ่านสูงสุด ${Math.round(NET_GET_MS/1000)} วิ (ตอนเปิดแอป ${Math.round(NET_BOOT_MS/1000)} วิ) รอบันทึกสูงสุด ${Math.round(NET_POST_MS/1000)} วิ</div>
     ${heavy? `<div class="banner-warn">⚠️ ข้อมูลใหญ่กว่าปกติ — ส่วนใหญ่มาจากรูปสลิป ทำให้ซิงก์ช้าและหลุดง่าย${mg? " กดปุ่ม “ลดขนาดข้อมูล” ด้านล่างได้":""}</div>`:""}
     <p class="muted" style="margin-top:0; font-size:12px;">แอปบันทึกลงเครื่องก่อนเสมอ แล้วส่งขึ้น Google Sheet ให้อัตโนมัติ (ลองซ้ำเองเมื่อไม่สำเร็จ) และดึงข้อมูลใหม่จากเพื่อนทุก 6 วินาทีขณะกำลังตี / 20 วินาทีในเวลาปกติ • รูปสลิปของนัดที่จบเกิน ${SLIP_KEEP_DAYS} วันจะถูกตัดออกอัตโนมัติเพื่อให้ซิงก์เร็ว (ยอดเงินและผู้อนุมัติยังอยู่ครบ)
     ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ต แล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างจะถูกส่งให้เองไม่หายไปไหน"}</p>
@@ -1983,7 +1989,7 @@ function inputGate(){
   if(SYNC.newerVer) return { level:"stop", msg:"🔄 แอปในเครื่องนี้เป็นรุ่นเก่า ("+APP_VER+") เพื่อนใช้รุ่น "+SYNC.newerVer+" แล้ว — กรุณาปิดแอปแล้วเปิดใหม่ก่อนป้อนข้อมูล" };
   if(SYNC.blocked) return { level:"stop", msg:"⛔ ระบบกลางไม่รับการแก้ไขล่าสุดของคุณ — อย่าป้อนต่อ แตะแถบด้านบนเพื่อดูวิธีแก้" };
   if(SYNC.bootStale) return { level:"stop", msg:"📴 เปิดแอปจากสำเนาในเครื่อง ยังไม่ได้ข้อมูลล่าสุดจากก๊วน — รอให้เชื่อมต่อได้ก่อน หรือปิดแอปแล้วเปิดใหม่" };
-  if(__pollFail>=2 || (!gasOK && sinceOk > 30000)) return { level:"warn", msg:"⚠️ ติดต่อระบบกลางไม่ได้ "+Math.round(Math.min(sinceOk,9e6)/1000)+" วิ — รอให้แถบสถานะกลับเป็นปกติก่อนกดบันทึก มิฉะนั้นข้อมูลอาจไปทับของเพื่อน" };
+  if(__pollFail>=2 || (!gasOK && sinceOk > STALE_PLAY_MS)) return { level:"warn", msg:"⚠️ ติดต่อระบบกลางไม่ได้ "+Math.round(Math.min(sinceOk,9e6)/1000)+" วิ — รอให้แถบสถานะกลับเป็นปกติก่อนกดบันทึก มิฉะนั้นข้อมูลอาจไปทับของเพื่อน" };
   if(sinceOk > (playing? STALE_PLAY_MS : STALE_IDLE_MS)) return { level:"warn", msg:"⏳ ข้อมูลในเครื่องอัปเดตล่าสุด "+Math.round(sinceOk/1000)+" วิที่แล้ว — กำลังดึงข้อมูลใหม่ รอสักครู่ก่อนกดต่อ" };
   if(SYNC.pending) return { level:"warn", msg:"⏳ ยังมีรายการของคุณค้างส่ง — รอให้ส่งสำเร็จก่อนป้อนรายการถัดไป" };
   return null;
@@ -5012,7 +5018,7 @@ async function pollRemote(){
     await flushPending();              // มีของค้างในเครื่อง → ส่งขึ้นก่อน
     /* ส่ง rev ที่ยืนยันแล้วไปถาม — ถ้าไม่เปลี่ยน เซิร์ฟเวอร์ตอบสั้น ไม่ต้องดาวน์โหลดทั้งก้อน
        (ถามด้วย serverRev เฉพาะเมื่อไม่มีของค้าง เพราะตอนมีของค้าง db.rev ถูกดันล่วงหน้าไว้) */
-    const remote = await gasLoad(SYNC.pending? -1 : serverRev);
+    const remote = await gasLoad(SYNC.pending? -1 : serverRev, undefined, SYNC.pending? null : (db && db.saveTok));
     if(remote==="same"){ __pollFail = 0; SYNC.bootStale = false; updateSyncBadge(); return; }
     if(!remote){ if(!gasOK) __pollFail++; updateSyncBadge(); return; }
     __pollFail = 0; SYNC.bootStale = false;
@@ -5044,8 +5050,12 @@ async function init(){
   const cached = cacheLoad();
   let loaded = cached, fromRemote = false;
   if(gasUrl()){
-    /* ตอนบูตต้องโหลดทั้งก้อน — ให้เวลานานกว่า poll ปกติ (มือถือช้า + ข้อมูลใหญ่ เป็นเหตุ "หมดเวลารอ >15 วิ" ที่ Admin เห็น) */
-    const remote = await gasLoad(null, 40000);
+    /* ตอนบูตให้เวลานานกว่า poll ปกติ (มือถือช้า + ข้อมูลใหญ่)
+       [11a] ถ้ามีสำเนาในเครื่องและไม่มีของค้าง → ถามด้วย rev+tok ของสำเนา ถ้าชีตยังอยู่ rev เดิม เซิร์ฟเวอร์ตอบ ~60 ไบต์
+       แอปเปิดได้เร็วโดยไม่ต้องดาวน์โหลดทั้งก้อน (ถ้าสำเนาล้ำหน้าหรือเป็นคนละ tok เซิร์ฟเวอร์จะส่งข้อมูลเต็มมาเอง) */
+    const canDelta = cached && !__pend.length && Number(cached.rev)>0;
+    let remote = await gasLoad(canDelta? Number(cached.rev) : null, NET_BOOT_MS, canDelta? cached.saveTok : null);
+    if(remote==="same"){ remote = cached; }
     if(remote){
       /* ⚠️ กติกาสำคัญ: ข้อมูลของส่วนกลางคือ "ฐาน" เสมอ ห้ามเอาสำเนาในเครื่องไปทับ
          เพราะเครื่องที่ค้างส่งมานานจะมีข้อมูลเก่า แล้วลบงานของทั้งก๊วนทิ้ง
@@ -5069,6 +5079,7 @@ async function init(){
   db = loaded || seedDb();
   lastRaw = JSON.stringify(db);
   if(fromRemote){
+    cacheSave();                   // [11a] เก็บสำเนาทันทีที่บูตสำเร็จ — เดิมเก็บเฉพาะเมื่อมีการบันทึก ทำให้เครื่องที่ไม่เคยกดอะไรต้องโหลดทั้งก้อนทุกครั้งที่เปิด
     const n = pendReapply();       // เติมเฉพาะรายการของเราที่ยังไม่ขึ้นส่วนกลาง
     if(n){ SYNC.pending = true; cacheSave(); }
   }
