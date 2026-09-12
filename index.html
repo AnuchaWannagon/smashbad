@@ -994,7 +994,9 @@ function healthIssues(){
     if(row.hasIssue) out.issues.push(row);
     out.rows.push(row);
   });
-  out.rows.sort((a,b)=> (b.hasIssue-a.hasIssue) || (b.isOld-a.isOld) || ((b.at||0)-(a.at||0)));
+  /* [11b] เรียง: กลุ่มที่มีปัญหาก่อน โดยเหตุที่เกิดล่าสุดอยู่บนสุด (ตาม issueAt) → กลุ่มรุ่นเก่า → ที่เหลือ ตามเวลาบันทึกล่าสุด */
+  out.rows.sort((a,b)=> (b.hasIssue-a.hasIssue) || (b.isOld-a.isOld)
+    || ((a.hasIssue && b.hasIssue) ? ((b.issueAt||0)-(a.issueAt||0)) : ((b.at||0)-(a.at||0))));
   return out;
 }
 function canSeeHealth(){ return !!meId && (isAdmin() || isDefaultMgr()); }
@@ -5036,7 +5038,9 @@ async function pollRemote(){
    ===================================================== */
 async function init(){
   // แสดงหน้าจอทันทีด้วยข้อมูลชั่วคราว แล้วซิงก์ของจริงเบื้องหลัง — แอปเปิดไว ไม่ค้างหน้าขาว
-  db = seedDb();
+  // [11b] ใช้สำเนาล่าสุดในเครื่องเป็นภาพชั่วคราว (เดิมใช้ seedDb = รายชื่อตั้งต้นสมัยก่อตั้ง ทำให้เห็นชื่อเก่าระหว่างรอซิงก์)
+  const cached = cacheLoad();
+  db = cached || seedDb();
   window.__booting = true;
   // 🔒 ยังไม่มีรหัสเข้าก๊วนบนเครื่องนี้ — แสดงหน้าใส่รหัสทันที (ไม่โหลด/ไม่แสดงข้อมูลใดๆ)
   if(gasUrl() && !clubKey()){
@@ -5047,7 +5051,6 @@ async function init(){
   renderLogin();
   pendLoad();
   // 1) สำเนาในเครื่อง (เร็วที่สุด — ไม่ต้องรอเน็ต) → 2) Google Sheet → 3) เริ่มใหม่
-  const cached = cacheLoad();
   let loaded = cached, fromRemote = false;
   if(gasUrl()){
     /* ตอนบูตให้เวลานานกว่า poll ปกติ (มือถือช้า + ข้อมูลใหญ่)
