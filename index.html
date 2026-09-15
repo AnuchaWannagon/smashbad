@@ -48,6 +48,11 @@ input,select{ font-family:'Noto Sans Thai',sans-serif; }
 .btn{ border:none; border-radius:12px; padding:13px 20px; font-weight:700; font-size:15.5px; }
 .btn:active{ transform:scale(.97); }
 .btn:disabled{ opacity:.45; }
+/* [15a] ปุ่มกำลังทำงาน: แสดงนาฬิกาทราย และกันกดซ้ำ */
+button.busy{ opacity:.6; pointer-events:none; position:relative; }
+button.busy > *{ visibility:hidden; }
+button.busy::after{ content:"⏳"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:18px; visibility:visible; animation:busySpin 1.2s ease-in-out infinite; }
+@keyframes busySpin{ 0%,100%{ transform:rotate(0deg);} 50%{ transform:rotate(180deg);} }
 .btn-lime{ background:var(--lime); color:#15230A; }
 .btn-blue{ background:var(--blue); color:#fff; }
 .btn-ghost{ background:var(--card2); color:var(--ink); border:1px solid var(--line); }
@@ -390,7 +395,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.11b";   // ให้ตรงกับ Code.gs 11b (ฝั่งแอปไม่มีการแก้เพิ่มจาก 11a)   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.15a";   // ให้ตรงกับ Code.gs 11b (ฝั่งแอปไม่มีการแก้เพิ่มจาก 11a)   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -645,6 +650,11 @@ function pendPresent(p){
       const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return true;
       const v = (s[p.payload.k]||{})[p.payload.mid]; return !v || !!v.slipUrl || !v.slip;
     }
+    if(p.kind==="hclear"){
+      const c = (db.clients||{})[p.payload.id]; if(!c) return true;
+      return !(c.issueAt && c.issueAt <= p.payload.at) && c.ak === ((c.v||"") + ">" + APP_VER);
+    }
+    if(p.kind==="hack") return (Number(db.healthAckAt)||0) >= p.payload.at;
   }catch(e){}
   return true;
 }
@@ -712,6 +722,11 @@ function pendReapply(){
         const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
         const v = (s[p.payload.k]||{})[p.payload.mid]; if(!v || v.slipUrl) return;
         v.slipUrl = p.payload.url; v.slipId = p.payload.id||null; v.slip = null; n++;
+      } else if(p.kind==="hclear"){
+        const c = (db.clients||{})[p.payload.id]; if(!c) return;
+        if(applyClientClear(c, p.payload.at)) n++;
+      } else if(p.kind==="hack"){
+        if((Number(db.healthAckAt)||0) < p.payload.at){ db.healthAck = p.payload.key; db.healthAckAt = p.payload.at; n++; }
       } else if(p.kind==="paid"){
         /* สถานะ "จ่ายแล้ว/ยกเลิก" — เดิมไม่มีคิวกู้คืน ผู้จัดการกดจ่ายให้เพื่อนแล้วหายบ่อยเมื่อชนกับคนอื่น */
         const s = (db.sessions||[]).find(x=>x.id===p.payload.sid); if(!s) return;
@@ -867,6 +882,38 @@ async function gasSave(){
   gasOK = false; SYNC.saveFails++; return false;
 }
 
+/* ---------- [15a] กันกดซ้ำ: ปุ่มที่เรียกฟังก์ชัน async (บันทึกเซ็ต / เริ่มตี / จ่ายเงิน ฯลฯ)
+   จะขึ้นนาฬิกาทรายและล็อกปุ่มอื่นไว้จนงานเสร็จ (สูงสุด 12 วินาที) — ปุ่มปิด/แท็บล่างยังกดได้เสมอ
+   เหตุ: เดิมกด "บันทึกเซ็ต" สองครั้งติดกันได้เซ็ตซ้ำ เพราะ setDraft ถูกล้างหลัง await storeSave ---------- */
+const BUSY_MAX_MS = 12000;
+let __busyN = 0, __busyAt = 0;
+function busyActive(){ return __busyN > 0 && (Date.now() - __busyAt) < BUSY_MAX_MS; }
+function busyOn(btn){
+  __busyN++; __busyAt = Date.now();
+  if(btn && !btn.classList.contains("busy")){ btn.classList.add("busy"); btn.setAttribute("aria-busy","true"); }
+}
+function busyOff(){
+  __busyN = Math.max(0, __busyN - 1);
+  if(!__busyN) document.querySelectorAll("button.busy").forEach(b=>{ b.classList.remove("busy"); b.removeAttribute("aria-busy"); });
+}
+document.addEventListener("click", function(e){
+  const b = e.target && e.target.closest ? e.target.closest("button") : null;
+  if(!b) return;
+  if(b.classList.contains("mclose") || b.classList.contains("bn-item") || b.classList.contains("lang")) return;
+  if(busyActive()){ e.preventDefault(); e.stopImmediatePropagation(); return; }   // ยังทำงานของปุ่มก่อนอยู่
+  if(__busyN && !busyActive()) __busyN = 0;   // งานค้างเกินเวลา — ปลดล็อก
+  const code = b.getAttribute("onclick"); if(!code) return;
+  const m = /^\s*([A-Za-z_$][\w$]*)\s*\((.*)\)\s*;?\s*$/.exec(code); if(!m) return;
+  const fn = window[m[1]];
+  if(typeof fn !== "function" || (fn.constructor && fn.constructor.name) !== "AsyncFunction") return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  busyOn(b);
+  let r;
+  try{ r = (new Function("event", "return " + code.trim().replace(/;\s*$/,""))).call(b, e); }
+  catch(err){ busyOff(); throw err; }
+  Promise.resolve(r).catch(function(err){ console.error(err); }).then(busyOff);
+}, true);
+
 /* ---------- บันทึก: ลงเครื่องก่อนเสมอ แล้วค่อยส่งขึ้นส่วนกลาง (กันงานซ้อนกันด้วย mutex) ---------- */
 let __saving = false, __saveAgain = false;
 async function storeSave(){
@@ -988,15 +1035,17 @@ function healthIssues(){
   const cutIssue = Date.now() - HEALTH_ISSUE_HOURS*3600000;
   Object.keys(cl).forEach(id=>{
     const c = cl[id]; const row = Object.assign({ id }, c);
-    row.isOld = !!(c.v && verCmp(c.v, APP_VER) < 0) || !c.v;
+    const oldVer = !!(c.v && verCmp(c.v, APP_VER) < 0) || !c.v;
+    /* [15a] Admin กด "ล้าง" ที่แถวรุ่นเก่าได้ — ซ่อนจนกว่ารุ่นของเครื่องนั้นหรือรุ่นของแอปจะเปลี่ยน */
+    row.isOld = oldVer && c.ak !== ((c.v||"") + ">" + APP_VER);
     row.hasIssue = !!(c.issueAt && c.issueAt > cutIssue);   // หมดอายุเองใน 48 ชม. (bl แสดงเป็นตัวเลขสะสมเท่านั้น)
+    row.last = Math.max(Number(c.at)||0, row.hasIssue? (Number(c.issueAt)||0) : 0);
     if(row.isOld) out.old.push(row);
     if(row.hasIssue) out.issues.push(row);
     out.rows.push(row);
   });
-  /* [11b] เรียง: กลุ่มที่มีปัญหาก่อน โดยเหตุที่เกิดล่าสุดอยู่บนสุด (ตาม issueAt) → กลุ่มรุ่นเก่า → ที่เหลือ ตามเวลาบันทึกล่าสุด */
-  out.rows.sort((a,b)=> (b.hasIssue-a.hasIssue) || (b.isOld-a.isOld)
-    || ((a.hasIssue && b.hasIssue) ? ((b.issueAt||0)-(a.issueAt||0)) : ((b.at||0)-(a.at||0))));
+  /* [15a] เรียงตามเวลาที่เกิดเหตุ/บันทึกล่าสุดอย่างเดียว — เครื่องที่เพิ่งมีความเคลื่อนไหวอยู่บนสุด สีพื้นบอกกลุ่มปัญหาแทน */
+  out.rows.sort((a,b)=> (b.last||0)-(a.last||0));
   return out;
 }
 function canSeeHealth(){ return !!meId && (isAdmin() || isDefaultMgr()); }
@@ -1008,16 +1057,26 @@ function updateHealthBanner(){
   if(h.old.length)    parts.push("👴 " + h.old.length + " คนยังใช้แอปรุ่นเก่า");
   if(h.issues.length) parts.push("🩺 " + h.issues.length + " คนมีปัญหาการซิงก์ใน " + HEALTH_ISSUE_HOURS + " ชม.");
   if(!parts.length){ el.style.display = "none"; lsDel(HEALTH_ACK_LS); return; }
-  /* Admin กด "รับทราบ" แล้ว → ซ่อนจนกว่าชุดปัญหาจะเปลี่ยน (คนใหม่/รุ่นใหม่/เหตุใหม่) */
-  if(lsGet(HEALTH_ACK_LS) === healthKey(h)){ el.style.display = "none"; return; }
+  /* Admin กด "รับทราบ" แล้ว → ซ่อนจนกว่าจะมี "คนใหม่" ในชุดปัญหา
+     [15a] เก็บใน db.healthAck ด้วย ให้ใช้ได้ทุกเครื่องของ Admin/ผู้จัดการ (เดิมอยู่แต่ในเครื่องเดียว) */
+  const key = healthKey(h);
+  if(lsGet(HEALTH_ACK_LS) === key || (db.healthAck && db.healthAck === key)){ el.style.display = "none"; return; }
   el.style.display = "block";
   el.innerHTML = "🛠️ <b>Admin:</b> " + parts.join(" • ") + " — <u>แตะดูรายชื่อและแจ้งเตือน</u>";
 }
 const HEALTH_ACK_LS = "smash-health-ack";
+/* [15a] คีย์ระบุ "ชุดคน" ไม่ใช่ "ชุดเหตุการณ์" — เดิมผูกกับ issueAt ทำให้เครื่องเดิมที่ซิงก์สะดุดซ้ำปลุกแถบเตือนกลับมาทุกครั้ง */
 function healthKey(h){
-  return [].concat(h.old.map(r=>"o:"+r.id+":"+(r.v||"")), h.issues.map(r=>"i:"+r.id+":"+(r.issueAt||0))).sort().join("|");
+  return [].concat(h.old.map(r=>"o:"+r.id+":"+(r.v||"")), h.issues.map(r=>"i:"+r.id)).sort().join("|");
 }
-function ackHealth(){ lsSet(HEALTH_ACK_LS, healthKey(healthIssues())); updateHealthBanner(); closeModal(); toast("รับทราบแล้ว — จะเตือนใหม่เมื่อมีปัญหาชุดใหม่"); }
+async function ackHealth(){
+  const key = healthKey(healthIssues());
+  lsSet(HEALTH_ACK_LS, key);
+  db.healthAck = key; db.healthAckAt = Date.now();
+  pendAdd("hack", { key, at: db.healthAckAt });   // ให้รอดเมื่อชนกับการบันทึกของเพื่อน
+  updateHealthBanner(); closeModal(); toast("รับทราบแล้ว");
+  await storeSave();
+}
 /* ข้อความแจ้งเตือน (ใช้ทั้งโพสต์กระดานและคัดลอกไปไลน์) */
 function healthNoticeText(forLine){
   const h = healthIssues();
@@ -1040,10 +1099,22 @@ async function copyHealthNotice(){
       <textarea readonly style="width:100%; min-height:180px; font-size:13px;" onclick="this.select()">${esc(t)}</textarea>`);
   }
 }
+/* [15a] "ล้าง" ล้างทั้งเหตุซิงก์และป้ายรุ่นเก่า และเข้าคิวกู้คืน — เดิมหายทุกครั้งที่บันทึกชนกับสมาชิกที่กำลังบันทึกพร้อมกัน */
+function applyClientClear(c, at){
+  if(!c) return false;
+  let changed = false;
+  if(c.issueAt && c.issueAt <= at){ delete c.issue; delete c.issueAt; c.bl = 0; changed = true; }
+  const ak = (c.v||"") + ">" + APP_VER;
+  if(c.ak !== ak){ c.ak = ak; changed = true; }
+  return changed;
+}
 async function clearClientIssue(id){
   if(!canSeeHealth() || !db.clients || !db.clients[id]) return;
-  delete db.clients[id].issue; delete db.clients[id].issueAt; db.clients[id].bl = 0;
-  await storeSave(); openClientHealth(); toast("ล้างเหตุของ " + nameOf(id) + " แล้ว");
+  const at = Date.now();
+  applyClientClear(db.clients[id], at);
+  pendAdd("hclear", { id, at });
+  openClientHealth(); toast("ล้างรายการของ " + nameOf(id) + " แล้ว");
+  await storeSave(); updateHealthBanner();
 }
 function fmtAgo(t){
   if(!t) return "-";
@@ -1060,12 +1131,11 @@ function openClientHealth(){
       <td style="white-space:nowrap; color:${r.isOld? "var(--amber)" : "var(--lime)"};">${esc(r.v||"ก่อน 09.05a")}${r.isOld? " ⚠️":""}</td>
       <td style="white-space:nowrap;">${fmtAgo(r.at)}</td>
       <td style="text-align:center;">${(r.sf||0)}/${(r.rf||0)}/${(r.bl||0)}</td>
-      <td style="font-size:11.5px;">${r.issue? esc(r.issue) + `<div class="muted" style="font-size:10.5px;">${fmtAgo(r.issueAt)}ที่แล้ว • <u style="cursor:pointer;" onclick="clearClientIssue('${r.id}')">ล้าง</u></div>` : '<span class="muted">-</span>'}</td>
+      <td style="font-size:11.5px;">${r.issue? esc(r.issue) + `<div class="muted" style="font-size:10.5px;">${fmtAgo(r.issueAt)}ที่แล้ว</div>` : (r.isOld? '<span class="muted">รุ่นเก่า</span>' : '<span class="muted">-</span>')}${(r.issue||r.isOld)? ` <u style="cursor:pointer; color:var(--blue);" onclick="clearClientIssue('${r.id}')">ล้าง</u>`:""}</td>
     </tr>`).join("");
   modal(`
     <div class="modal-head"><h3>🩺 สุขภาพเครื่องสมาชิก</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="font-size:12.5px; margin:0 0 10px;">ข้อมูลนี้แต่ละเครื่องแนบมาเองทุกครั้งที่บันทึก จึงเห็นเฉพาะคนที่เคยบันทึกในรอบ ${HEALTH_KEEP_DAYS} วัน
-    รุ่นปัจจุบัน <b>${APP_VER}</b> • คอลัมน์ "ล้มเหลว" = บันทึก/อ่าน/ถูกปฏิเสธ (สะสมตั้งแต่เครื่องนั้นเปิดแอป)</p>
+    <p class="muted" style="font-size:12px; margin:0 0 10px;">รุ่นปัจจุบัน <b>${APP_VER}</b> • เรียงตามความเคลื่อนไหวล่าสุด • ล้มเหลว = บันทึก/อ่าน/ถูกปฏิเสธ</p>
     <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
       <span class="tag" style="background:rgba(255,194,75,.15); color:var(--amber);">รุ่นเก่า ${h.old.length} คน</span>
       <span class="tag" style="background:rgba(255,92,92,.15); color:#ff8a8a;">มีปัญหา ${HEALTH_ISSUE_HOURS} ชม. ${h.issues.length} คน</span>
@@ -1081,9 +1151,7 @@ function openClientHealth(){
         <button class="btn btn-lime btn-sm" style="flex:1;" onclick="postHealthNotice()">📢 โพสต์ขึ้นกระดาน</button>
         <button class="btn btn-lime btn-sm" style="flex:1;" onclick="copyHealthNotice()">📋 คัดลอกส่งไลน์</button>
       </div>
-      <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px;" onclick="ackHealth()">✓ รับทราบแล้ว ซ่อนแถบเตือนชุดนี้ (จะเตือนใหม่เมื่อมีปัญหาชุดใหม่)</button>` : ""}
-    <p class="muted" style="font-size:11.5px; margin-top:10px;">แถบเตือนหายเองเมื่อ: คนที่ใช้รุ่นเก่า<b>บันทึกอะไรก็ได้</b>ด้วยแอปรุ่นใหม่ • เหตุซิงก์ผิดปกติผ่านไป ${HEALTH_ISSUE_HOURS} ชม. • หรือ Admin กด "ล้าง" ที่รายการนั้น</p>
-    <p class="muted" style="font-size:11.5px; margin-top:10px;">ฝั่งเซิร์ฟเวอร์: แท็บ ChangeLog ในชีตบันทึกรุ่นแอปท้ายชื่อผู้บันทึกทุกครั้ง และเมื่อพร้อมให้ตั้ง MIN_APP_VER ใน Apps Script เพื่อกั้นรุ่นเก่าไม่ให้เขียน</p>
+      <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px;" onclick="ackHealth()">✓ รับทราบแล้ว ซ่อนแถบเตือน (เตือนใหม่เมื่อมีคนใหม่มีปัญหา)</button>` : ""}
   `);
 }
 /* Admin กดปุ่มเดียว: สร้างประกาศบนกระดาน ระบุชื่อคนที่ต้องอัปเดต/มีปัญหา พร้อมวิธีแก้ */
@@ -1193,17 +1261,14 @@ function openSyncInfo(){
     ${SYNC.lastErr? `<div class="banner-warn" style="font-size:11.5px;">🔎 สาเหตุล่าสุด: ${esc(SYNC.lastErr)}</div>`:""}
     <div class="row" style="margin-bottom:10px;"><span class="muted">เวอร์ชันแอป</span><b>${APP_VER}</b></div>
     ${size>4000000? `<div class="banner-warn" style="font-size:11.5px;">⚠️ ข้อมูลใหญ่เกิน 4 MB — ใกล้ขีดจำกัดขนาดคำขอของ Apps Script (ราว 50 MB) และชีตจะมีมากกว่า 90 เซลล์ต่อสำเนา ควรตัดสลิป/นัดเก่าออก</div>`:""}
-    <div class="muted" style="font-size:11px; margin:-2px 0 8px;">ฝั่งชีตตัดข้อมูลเป็นก้อนละ 45,000 ตัวอักษรต่อเซลล์อัตโนมัติ (ตอนนี้ ${Math.ceil(size/45000)} เซลล์) จึงไม่ติดเพดาน 50,000 ตัวอักษรต่อเซลล์ของ Google Sheet • รออ่านสูงสุด ${Math.round(NET_GET_MS/1000)} วิ (ตอนเปิดแอป ${Math.round(NET_BOOT_MS/1000)} วิ) รอบันทึกสูงสุด ${Math.round(NET_POST_MS/1000)} วิ</div>
     ${heavy? `<div class="banner-warn">⚠️ ข้อมูลใหญ่กว่าปกติ — ส่วนใหญ่มาจากรูปสลิป ทำให้ซิงก์ช้าและหลุดง่าย${mg? " กดปุ่ม “ลดขนาดข้อมูล” ด้านล่างได้":""}</div>`:""}
-    <p class="muted" style="margin-top:0; font-size:12px;">แอปบันทึกลงเครื่องก่อนเสมอ แล้วส่งขึ้น Google Sheet ให้อัตโนมัติ (ลองซ้ำเองเมื่อไม่สำเร็จ) และดึงข้อมูลใหม่จากเพื่อนทุก 6 วินาทีขณะกำลังตี / 20 วินาทีในเวลาปกติ • รูปสลิปของนัดที่จบเกิน ${SLIP_KEEP_DAYS} วันจะถูกตัดออกอัตโนมัติเพื่อให้ซิงก์เร็ว (ยอดเงินและผู้อนุมัติยังอยู่ครบ)
-    ${ok? "" : "<br><br>ถ้าซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ต แล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างจะถูกส่งให้เองไม่หายไปไหน"}</p>
+    ${ok? "" : '<p class="muted" style="margin-top:0; font-size:12px;">ซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ตแล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างไม่หายไปไหน</p>'}
     <button class="btn btn-lime btn-block" onclick="retrySync()">🔄 ลองเชื่อมต่อใหม่</button>
     ${mg && embeddedSlips().length? `<div style="height:8px;"></div><button class="btn btn-lime btn-block" onclick="migrateSlipsToDrive()">☁️ ย้ายสลิปที่ฝังอยู่ ${embeddedSlips().length} รูปขึ้น Drive (ลดข้อมูลได้มากที่สุด)</button>`:""}
     ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="cleanSlipsNow()">🧹 ลดขนาดข้อมูล (ตัดรูปสลิปเก่ากว่า ${SLIP_KEEP_DAYS} วัน)</button>`:""}
     ${mg && slips? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="cleanSlipsAll()">🧹 ตัดรูปสลิป<b>ทั้งหมด</b>ของนัดที่จบแล้ว (${slips} รูป)</button>`:""}
     ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="closeModal(); openGasSetup();">⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)</button>`:""}
-    <div style="height:8px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 /* สลิปที่ยังฝัง base64 อยู่ (อัปโหลด Drive ไม่สำเร็จตอนแจ้ง) */
 function embeddedSlips(){
@@ -1330,6 +1395,12 @@ const I18N = {
 "⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)":"⚙️ Connection settings (Admin/Manager)",
 "◀️ ย้อนกลับ (ไม่บันทึก)":"◀️ Back (don't save)",
 "◀️ ย้อนกลับ":"◀️ Back",
+"💰 ค่าตีของฉัน":"💰 My fees",
+"✉️ แจ้ง Admin ว่าข้อมูลไม่ถูกต้อง":"✉️ Tell Admin the data is wrong",
+"👥 รายการทั้งนัดล่าสุด (ผู้จัดการ)":"👥 Whole latest session (manager)",
+"ยังไม่มีนัดที่ต้องจ่าย":"Nothing to pay yet",
+"📊 สรุปผลนัดนี้":"📊 Session summary",
+"👇 ไปที่ขั้นสรุปผล":"👇 Go to finish step",
 "กำลังเชื่อมต่อ…":"Connecting…",
 "☁️ เชื่อมต่อสำเร็จ ข้อมูลซิงก์แล้ว":"☁️ Connected — data synced",
 "ยังเชื่อมต่อไม่ได้ — จะลองใหม่อัตโนมัติ":"Still can't connect — will retry automatically",
@@ -2148,8 +2219,7 @@ function openNextSessionInfo(){
     <h3 style="font-family:'Prompt',sans-serif; font-size:15px; color:var(--lime); margin:0 0 10px;">🙋 ลงชื่อแล้ว ${n} คน</h3>
     ${n? `<div class="chips">${chips}</div>` : '<div class="muted">ยังไม่มีใครลงชื่อ</div>'}
     ${meId? "" : '<p class="muted" style="margin-bottom:0;">ล็อกอินด้วยชื่อของคุณเพื่อลงชื่อเข้าร่วมนัดนี้</p>'}
-    <div style="height:12px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 /* 🔒 หน้าใส่รหัสเข้าก๊วน (เฉพาะสมาชิก) */
 async function submitClubKey(){
@@ -2345,7 +2415,7 @@ function mainMenu(){
   const fbCount = fbBadgeCount();
   return `<div class="menu-grid">
     <button class="menu-btn" onclick="openPastList()"><span class="mi">🏁</span>สรุปนัดที่ผ่านมา</button>
-    <button class="menu-btn" onclick="openPayNow()"><span class="mi">💰</span>จ่ายเงินค่าตี</button>
+    <button class="menu-btn" onclick="openMyPay()"><span class="mi">💰</span>จ่ายเงินค่าตี</button>
     <button class="menu-btn" onclick="openAbout()"><span class="mi">ℹ️</span>เกี่ยวกับ App${fbCount? ` (${fbCount})`:""}</button>
     <button class="menu-btn" onclick="openManageMenu()"><span class="mi">⚙️</span>จัดการก๊วน</button>
   </div>`;
@@ -2421,8 +2491,7 @@ function openPastList(){
         <span>📊 ${fmtDateShort(x.date)} • ${x.attendees.length} คน</span>
         <b style="color:var(--lime);">${money(totalCost(x))}</b>
       </button>`).join("") : '<div class="empty"><div class="big">🏁</div>ยังไม่มีนัดที่จบ</div>'}
-    ${moreBtn}
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    ${moreBtn}`);
 }
 
 /* ---------- popup: ความคิดเห็น ---------- */
@@ -2446,8 +2515,7 @@ function openManageMenu(){
       <div style="height:8px;"></div>
       <input type="file" id="xlsxImport" accept=".xlsx" style="display:none;" onchange="importExcel(this)">
       <button class="btn btn-ghost btn-block" onclick="document.getElementById('xlsxImport').click()">📤 นำเข้าจากไฟล์ Excel</button>`:""}
-    <div style="height:8px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 
 /* =====================================================
@@ -2490,7 +2558,6 @@ function openBoard(){
   const mgr = isMgrRole(meId);
   modal(`
     <div class="modal-head"><h3>📢 กระดานสื่อสารก๊วน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0; font-size:11.5px;">หน้าแรกจะแสดง 2 ข้อความ: 📢 ประกาศล่าสุด และ 💬 ข้อความทั่วไปล่าสุด</p>
     <div id="brdList" style="max-height:40vh; overflow:auto; margin-bottom:10px;">${rows}</div>
     <div class="frow" style="margin-bottom:8px;">
       <button id="btMsg" class="btn btn-sm btn-lime" style="flex:1;" onclick="setBrdType('msg')">💬 ข้อความทั่วไป</button>
@@ -2536,8 +2603,7 @@ function openAttNote(sid){
   if(!a) return toast("ลงชื่อก่อนจึงเขียนข้อความได้", true);
   modal(`
     <div class="modal-head"><h3>📝 ข้อความของฉันในนัดนี้</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0;">ข้อความสั้นๆ จะแสดงข้างชื่อคุณในรายชื่อผู้ลงชื่อ เช่น ไปถึง 19.00 / รับเพื่อนได้ 1 คน</p>
-    <div class="field"><input type="text" id="attNoteInp" maxlength="60" value="${esc(a.note||"")}" placeholder="พิมพ์ข้อความสั้นๆ…"></div>
+    <div class="field"><input type="text" id="attNoteInp" maxlength="60" value="${esc(a.note||"")}" placeholder="เช่น ไปถึง 19.00 / รับเพื่อนได้ 1 คน"></div>
     <button class="btn btn-lime btn-block" onclick="saveAttNote('${sid}')">💾 บันทึกข้อความ</button>
     ${a.note? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="clearAttNote('${sid}')">ลบข้อความ</button>`:""}`);
   const inp = $("attNoteInp"); if(inp){ inp.focus(); }
@@ -2599,7 +2665,6 @@ function renderOpenSession(s){
     </div>
     <button class="btn btn-ghost big-join" onclick="copyAnnounce('${s.id}')">📋 คัดลอกประกาศนัด → วางในไลน์กลุ่ม</button>
     ${canManage(s) ? `
-      <div class="banner-warn" style="margin-top:12px; margin-bottom:0;">📣 สำหรับผู้จัดการ: ตอนนี้ลงชื่อแล้ว <b>${n} คน</b> → จองคอร์ทล่วงหน้า <b>${nc} คอร์ท</b> ให้เพียงพอ • ข้อมูลคอร์ท (เลขคอร์ท/ชั่วโมง/ราคา) ค่อยกรอกทีหลังตอนถึงวันตี</div>
       <button class="btn btn-blue big-join" onclick="openStartPlay('${s.id}')">🏟️ ขั้นที่ 3: เปิดคอร์ท → เริ่มตี (ทำเมื่อถึงวันตี)</button>
     `:""}
     ${stageBar(s)}
@@ -2663,8 +2728,8 @@ function renderPlayingSession(s){
   </div>
 
   <div class="card" id="setFormCard">
-    <h3>✍️ บันทึกเซ็ต <span class="muted" style="font-weight:400;">(สมาชิกที่มาตีช่วยกันบันทึกได้)</span></h3>
-    ${canRecord ? renderSetForm(s) : `<div class="muted">เฉพาะผู้ที่ลงชื่อเข้าร่วมนัดนี้จึงบันทึกผลได้</div><button class="btn btn-ghost btn-sm btn-block" style="margin-top:10px;" onclick="openEditAttendees('${s.id}')">✏️ เพิ่ม / แก้ไขคนเข้าตี (ตอนนี้ ${s.attendees.length} คน)</button>`}
+    <h3>✍️ บันทึกเซ็ต</h3>
+    ${canRecord ? renderSetForm(s) : `<div class="muted">เฉพาะผู้ที่ลงชื่อเข้าร่วมนัดนี้จึงบันทึกผลได้ — เพิ่มชื่อได้ที่ปุ่ม 🙋 ด้านบน</div>`}
   </div>
 
   <div class="card">
@@ -2675,7 +2740,6 @@ function renderPlayingSession(s){
 
   <div class="card" id="finishCard">
     <h3>🏁 ขั้นที่ 5: สรุปผล</h3>
-    <p class="muted" style="margin-top:0;">ตรวจผลเซ็ตด้านบนให้ครบก่อน — ปิดนัดแล้วระบบจะสรุปสถิติและค่าตีของทุกคน</p>
     ${canManage(s)? `<button class="btn btn-blue big-join" style="margin-top:0;" onclick="finishSession('${s.id}')">🏁 สรุปผล — จบนัดนี้</button>`
       : `<div class="muted" style="text-align:center;">ผู้จัดการนัดจะเป็นคนกด "สรุปผล" เมื่อเลิกตี</div>`}
   </div>`;
@@ -2691,7 +2755,6 @@ function renderSetForm(s){
   const courtOpts = (s.courts||[]).map(c=>`<option value="${esc(c.no)}" ${String(setDraft.court)===String(c.no)?"selected":""}>คอร์ท ${esc(c.no)}</option>`).join("");
   return `
     <div class="field"><label class="setlbl">คอร์ทที่เล่น</label><select class="court-sel" onchange="setDraft.court=this.value">${courtOpts||'<option value="">-</option>'}</select></div>
-    <button class="btn btn-ghost btn-sm btn-block" style="margin-bottom:10px;" onclick="openEditAttendees('${s.id}')">✏️ เพิ่ม / แก้ไขคนเข้าตี (ตอนนี้ ${s.attendees.length} คน)</button>
     <div class="field"><label class="setlbl ta">ทีม A — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("A")}</div></div>
     <div class="field"><label class="setlbl tb">ทีม B — แตะเลือก 1-2 คน</label><div class="chips">${chipRow("B")}</div></div>
     <div class="frow">
@@ -2833,9 +2896,8 @@ function stageBar(s){
   return `<div class="frow" style="margin-top:12px;">
     <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="stepBack('${s.id}')">◀️ ย้อนกลับ</button>
     ${s.status==="playing"? `<button class="btn btn-sm" style="flex:1; font-weight:800; background:rgba(255,194,75,.14); color:var(--amber); border:1.5px solid rgba(255,194,75,.5);" onclick="openFeeEstimate('${s.id}')">💰 ประเมินค่าตี</button>`:""}
-    ${s.status==="open"? `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openEditSession('${s.id}')">✏️ แก้ไข</button>`:""}
   </div>
-  ${s.status==="playing"? `<div class="muted" style="text-align:center; font-size:12.5px; margin-top:8px; cursor:pointer;" onclick="var el=document.getElementById('finishCard'); if(el)el.scrollIntoView({behavior:'smooth'});">👇 ตรวจสอบข้อมูลการตีแล้วเข้าสู่ขั้นตอนสรุปผลด้านล่าง</div>`:""}`;
+  ${s.status==="playing"? `<div class="muted" style="text-align:center; font-size:12.5px; margin-top:8px; cursor:pointer;" onclick="var el=document.getElementById('finishCard'); if(el)el.scrollIntoView({behavior:'smooth'});">👇 ไปที่ขั้นสรุปผล</div>`:""}`;
 }
 async function manualSave(){
   await storeSave(); renderAll();
@@ -2880,7 +2942,7 @@ function openEditAttendees(sid){
   }).join("");
   modal(`
     <div class="modal-head"><h3>✏️ แก้ไขการลงชื่อ (${s.attendees.length} คน)</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:-4px;">นัด ${fmtDateShort(s.date)} — แตะ <b>+ ลงชื่อ</b> เพื่อลงชื่อแทนเพื่อน หรือ <b>− ถอนชื่อ</b> เพื่อถอนออก<br>คนที่มีผลเซ็ตบันทึกแล้วจะถอนชื่อไม่ได้ (ต้องลบเซ็ตนั้นก่อน)</p>
+    <p class="muted" style="margin-top:-4px; font-size:12px;">นัด ${fmtDateShort(s.date)} • คนที่มีผลเซ็ตแล้วถอนชื่อไม่ได้</p>
     ${rows}
     <div style="height:12px;"></div>
     <button class="btn btn-lime btn-block" onclick="closeModal(); renderAll();">✓ เสร็จแล้ว</button>`);
@@ -2934,7 +2996,6 @@ function openNewSession(){
   const opts = db.members.map(m=>`<option value="${m.id}" ${m.id===db.settings.defaultManagerId?"selected":""}>${m.emoji} ${esc(m.name)}${m.id===db.settings.defaultManagerId?" (ค่าเริ่มต้น)":""}</option>`).join("");
   modal(`
     <div class="modal-head"><h3>📅 ขั้นที่ 1: กำหนดวันตี & เปิดนัด</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0;">กำหนดแค่วัน สถานที่ และเวลา — ยังไม่ต้องมีข้อมูลคอร์ท รอดูยอดคนลงชื่อก่อนแล้วค่อยจองคอร์ทให้พอดี</p>
     <div class="field"><label>วันที่ตี</label><input type="date" id="nsDate" onchange="updateDatePv('nsDate','nsDatePv')" value="${today.toISOString().slice(0,10)}"><div id="nsDatePv" class="date-pv notx">📅 ${fmtDateFull(today.toISOString().slice(0,10))}</div></div>
     <div class="field"><label>สถานที่</label><input type="text" id="nsLoc" placeholder="เช่น ยิม4 มธ." value="ยิม4 มธ."></div>
     <div class="frow">
@@ -2942,8 +3003,7 @@ function openNewSession(){
       <div class="field"><label>ผู้จัดการนัดนี้</label><select id="nsMgr">${opts}</select></div>
     </div>
     <button class="btn btn-lime btn-block" onclick="createSession()">💾 บันทึก — เปิดนัดให้สมาชิกลงชื่อ</button>
-    <div style="height:8px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 async function createSession(){
   const date = $("nsDate").value;
@@ -3111,9 +3171,7 @@ function openAbout(){
     </div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">Admin</span><span style="font-weight:700;">${admins.map(a=>a.emoji+" "+esc(a.name)).join(", ")||"-"}</span></div>
     <div class="row" style="margin-bottom:12px;"><span class="muted">ผู้จัดการ</span><span style="font-weight:700;">${dm? dm.emoji+" "+esc(dm.name):"-"}</span></div>
-    <button class="btn btn-lime btn-block" onclick="openMsgBox()">✉️ ติดต่อ / ส่งข้อความ${bad? ` (${bad})`:""}</button>
-    <p class="muted" style="font-size:11.5px; text-align:center; margin:8px 0 10px;">ข้อความเห็นเฉพาะ Admin / ผู้จัดการ และผู้ส่งเท่านั้น — โต้ตอบกันได้ในกระทู้</p>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    <button class="btn btn-lime btn-block" onclick="openMsgBox()">✉️ ติดต่อ / ส่งข้อความ${bad? ` (${bad})`:""}</button>`);
 }
 
 function openMsgBox(){
@@ -3133,22 +3191,20 @@ function openMsgBox(){
   }).join("");
   modal(`
     <div class="modal-head"><h3>📥 กล่องข้อความ (${ths.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0; font-size:12px;">ข้อความเห็นเฉพาะ Admin / ผู้จัดการ และผู้ส่งเท่านั้น</p>
     <button class="btn btn-lime btn-block" style="margin-bottom:12px;" onclick="openMsgCompose()">✍️ เริ่มข้อความใหม่</button>
     ${rows || '<div class="empty"><div class="big">📭</div>ยังไม่มีข้อความ</div>'}
     <div style="height:10px;"></div>
     <button class="btn btn-ghost btn-block" onclick="openAbout()">◀️ ย้อนกลับ</button>`);
 }
 
-function openMsgCompose(){
+function openMsgCompose(prefill){
   msgImgDraft = null;
   modal(`
     <div class="modal-head"><h3>✍️ ข้อความถึง Admin / ผู้จัดการ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0;">สอบถาม แจ้งปัญหา หรือเสนอไอเดีย — เห็นเฉพาะ Admin / ผู้จัดการ และตัวคุณเอง</p>
-    <div class="field"><label>ข้อความของคุณ</label><textarea id="msgText" rows="4" placeholder="พิมพ์ข้อความ..."></textarea></div>
+    <div class="field"><label>ข้อความของคุณ <span class="muted" style="font-weight:400;">(เห็นเฉพาะ Admin / ผู้จัดการ และคุณ)</span></label><textarea id="msgText" rows="4" placeholder="สอบถาม แจ้งปัญหา หรือเสนอไอเดีย...">${esc(typeof prefill==="string"? prefill : "")}</textarea></div>
     <button class="btn btn-ghost btn-sm" onclick="attachMsgImage()">📷 แนบรูป</button>
     <div id="msgImgPrev"></div>
-    <p class="muted" style="font-size:11px; margin:6px 0 10px;">รูปจะถูกย่อและเก็บใน Google Drive เหมือนรูปสลิป — ไม่ทำให้แอปช้า</p>
+    <div style="height:10px;"></div>
     <button class="btn btn-lime btn-block" onclick="sendMsg(null)">📨 ส่งข้อความ</button>
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="openMsgBox()">◀️ ย้อนกลับ</button>`);
@@ -3229,7 +3285,6 @@ function openDelegate(){
   const opts = db.members.map(m=>`<option value="${m.id}" ${m.id===db.settings.defaultManagerId?"selected":""}>${m.emoji} ${esc(m.name)}</option>`).join("");
   modal(`
     <div class="modal-head"><h3>มอบหมายผู้จัดการนัดตี</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0;">ผู้จัดการ (ค่าเริ่มต้น) คือคนที่เปิดนัด จองคอร์ท กรอกข้อมูลคอร์ท และกดสรุปผลได้ — ค่าเริ่มต้นคือ Nu และมอบหมายให้คนอื่นแทนได้</p>
     <div class="field"><label>เลือกผู้จัดการ</label><select id="dgSel">${opts}</select></div>
     <button class="btn btn-lime btn-block" onclick="saveDelegate()">บันทึก</button>`);
 }
@@ -3514,7 +3569,7 @@ function renderSummaryHtml(s){
 /* ---------- หน้าการจ่ายเงิน (แยกจากสรุปผล) ---------- */
 function openPayment(sid){
   const s = db.sessions.find(x=>x.id===sid); if(!s) return;
-  histOpen = sid;
+  histOpen = sid; window.__payBack = null;
   modal(renderPaymentHtml(s));
 }
 /* ---------- 💰 ประเมินค่าตีระหว่างนัดยังไม่จบ — แยกเรื่องเก็บเงินออกจากเรื่องบันทึกคะแนน
@@ -3620,7 +3675,6 @@ function renderPaymentHtml(s){
           <button class="btn btn-lime btn-sm" style="flex:1;" onclick="openPaySlip('${s.id}')">🧾 แนบสลิปโอนเงิน</button>
           <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="payCash('${s.id}')">💵 แจ้งจ่ายเงินสด</button>
         </div>
-        <p class="muted" style="margin:8px 0 0; font-size:11.5px;">แนบสลิปแล้วระบบจะอ่านยอดเงินให้อัตโนมัติ จากนั้นผู้จัดการกดอนุมัติ</p>
       </div>`;
   }
 
@@ -3636,7 +3690,7 @@ function renderPaymentHtml(s){
   return `
     <div class="modal-head"><h3>${s.status==="done"? "💰 การจ่ายเงิน" : "💰 ประเมินค่าตี (นัดยังไม่จบ)"} — นัด ${fmtDateShort(s.date)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
 
-    ${s.status!=="done"? `<div class="banner-warn" style="margin-bottom:12px;">⏱️ นัดนี้ยังตีอยู่ — ยอดด้านล่างเป็น<b>ยอดประเมิน</b> ถ้ามีเปลี่ยนลูก/แก้ค่าคอร์ทเพิ่ม ยอดของคนที่<b>ยังไม่ได้จ่าย</b>จะถูกคำนวณใหม่<br>✅ คนที่ต้องกลับก่อน จ่ายได้เลย — ยอดของคนที่จ่ายแล้วจะถูก<b>ล็อกไว้ ณ ตอนจ่าย</b> ไม่เปลี่ยนตามหลัง${canMg? ` (ผู้จัดการกำหนดยอดเองล่วงหน้าได้ที่ "ปรับยอดจ่ายรายคน")`:""}</div>`:""}
+    ${s.status!=="done"? `<div class="banner-warn" style="margin-bottom:12px;">⏱️ นัดยังตีอยู่ — ยอดเป็น<b>ยอดประเมิน</b> จ่ายก่อนกลับได้ ยอดที่จ่ายแล้วจะล็อกไว้</div>`:""}
 
     <div class="sum-total">
       <div class="muted">ค่าใช้จ่ายรวมทั้งนัด</div>
@@ -3674,13 +3728,52 @@ function renderPaymentHtml(s){
     ${canMg? `<button class="btn btn-ghost btn-block" onclick="copyPaySummary('${s.id}')">📋 คัดลอกสรุปค่าใช้จ่าย → วางในไลน์กลุ่ม</button><div style="height:8px;"></div>`:""}
     <button class="btn btn-ghost btn-block" onclick="openPayHistory()">🧾 ประวัติการจ่ายเงินทั้งหมด</button>
     <div style="height:8px;"></div>
-    <div class="frow">
-      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openSummary('${s.id}')">📊 สรุปผล</button>
-      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="closeModal()">◀️ ย้อนกลับ</button>
-    </div>`;
+    <button class="btn btn-ghost btn-block btn-sm" onclick="openSummary('${s.id}')">📊 สรุปผลนัดนี้</button>`;
 }
 
-/* ---------- ปุ่มเมนู "จ่ายเงินค่าตี" — เปิดหน้าการจ่ายเงินของนัดที่เกี่ยวข้องที่สุด ---------- */
+/* ---------- [15a] ปุ่มเมนู "จ่ายเงินค่าตี" — รายการของฉันเท่านั้น ตามประวัติการตี (ไม่แสดงของทุกคน) ---------- */
+function myPayItems(){
+  const out = [];
+  (db.sessions||[]).forEach(s=>{
+    if(!s.attendees.some(a=>a.memberId===meId)) return;
+    if(s.status!=="done" && !(s.status==="playing" && totalCost(s)>0)) return;
+    const paid = !!(s.paid && s.paid[meId]);
+    const req = s.payReq && s.payReq[meId];
+    const info = (s.payInfo && s.payInfo[meId]) || null;
+    out.push({ s, amt: payAmt(s, meId), paid, req, info, live: s.status!=="done" });
+  });
+  return out.sort((a,b)=> b.s.date.localeCompare(a.s.date));
+}
+function openMyPay(){
+  const items = myPayItems();
+  const owe = items.filter(x=>!x.paid && !x.req);
+  const oweSum = owe.reduce((t,x)=>t+x.amt, 0);
+  window.__payBack = "my";
+  const rows = items.map(x=>{
+    const sid = x.s.id;
+    let st, act;
+    if(x.paid){ st = `<span class="tag tag-paid" style="cursor:default;">จ่ายแล้ว ✓${x.info? (x.info.method==="cash"?" 💵": x.info.method==="slip"?" 🧾":""):""}</span>`; act = slipSrc(x.info)? `viewSlip('${sid}','${meId}')` : `openPayment('${sid}')`; }
+    else if(x.req){ st = `<span class="tag tag-pending">⏳ รออนุมัติ ${x.req.method==="cash"?"💵":"🧾"}</span>`; act = `openPayReview('${sid}','${meId}')`; }
+    else { st = `<span class="tag tag-unpaid">ยังไม่จ่าย</span>`; act = `openPayFor('${sid}','${meId}')`; }
+    return `<div class="court-line" style="cursor:pointer;" onclick="${act}">
+      <span style="flex:1;">นัด ${fmtDateShort(x.s.date)}${x.live? ' <span class="muted" style="font-size:11px;">(ยังตีอยู่ • ยอดประเมิน)</span>':""}<br><span class="muted" style="font-size:12px;">📍 ${esc(x.s.loc||"-")} • ${x.s.attendees.length} คน</span></span>
+      <b style="color:var(--lime); margin-right:8px;">${money(x.amt)}</b>${st}
+    </div>`;
+  }).join("");
+  const mgr = isAdmin() || isDefaultMgr();
+  const latest = (db.sessions||[]).filter(s=>s.status!=="open").sort((a,b)=> b.date.localeCompare(a.date))[0];
+  modal(`
+    <div class="modal-head"><h3>💰 ค่าตีของฉัน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="sum-total" style="margin-bottom:12px;">
+      <div class="muted">ค้างจ่าย ${owe.length} นัด</div>
+      <div class="n" style="color:${owe.length? "var(--coral)":"var(--lime)"};">${money(oweSum)}</div>
+    </div>
+    ${rows || '<div class="empty"><div class="big">🧾</div>ยังไม่มีนัดที่ต้องจ่าย</div>'}
+    <div style="height:12px;"></div>
+    <button class="btn btn-ghost btn-block" onclick="openMsgCompose('แจ้งข้อมูลค่าตีไม่ถูกต้อง: ')">✉️ แจ้ง Admin ว่าข้อมูลไม่ถูกต้อง</button>
+    ${mgr && latest? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="window.__payBack=null; openPayment('${latest.id}')">👥 รายการทั้งนัดล่าสุด (ผู้จัดการ)</button>`:""}`);
+}
+/* เปิดหน้าการจ่ายเงินของนัดที่เกี่ยวข้องที่สุด (ใช้จากทางลัดอื่น) */
 function openPayNow(){
   // นัดที่กำลังตีอยู่และมีตัวเลขค่าใช้จ่ายแล้ว → เปิดหน้าประเมินค่าตี (จ่ายก่อนกลับได้)
   const act = activeSession();
@@ -3708,14 +3801,13 @@ function openPayFor(sid, mid){
   const amt = payAmt(s, mid);
   modal(`
     <div class="modal-head"><h3>💸 แจ้งจ่ายเงิน — <span class="notx">${m.emoji} ${esc(m.name)}</span></h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    ${mid!==meId? `<p class="muted" style="margin-top:0;">แจ้งแทนเพื่อนได้ — ผู้จัดการจะตรวจและกดอนุมัติอีกครั้ง</p>`:""}
     <div class="row" style="margin-bottom:12px;"><span class="muted">ยอดที่ต้องจ่าย</span><b style="font-size:18px; color:var(--lime);">${money(amt)}</b></div>
     <button class="btn btn-lime btn-block" onclick="openPaySlip('${sid}','${mid}')">🧾 แนบสลิปโอนเงิน</button>
     <div style="height:8px;"></div>
     <button class="btn btn-blue btn-block" onclick="payCash('${sid}','${mid}')">💵 แจ้งจ่ายเงินสด</button>
     ${canManage(s)? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="openUnpaidAction('${sid}','${mid}')">⚙️ ตัวเลือกผู้จัดการ (บันทึกรับเงิน / ทวง)</button>`:""}
     <div style="height:8px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
+    <button class="btn btn-ghost btn-block" onclick="${window.__payBack==="my"? "openMyPay()" : `openPayment('${sid}')`}">◀️ ย้อนกลับ</button>`);
 }
 
 /* ---------- ประวัติการจ่ายเงินทั้งหมด ---------- */
@@ -3741,8 +3833,7 @@ function openPayHistory(){
   modal(`
     <div class="modal-head"><h3>🧾 ประวัติการจ่ายเงิน (${items.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     ${rows || '<div class="empty"><div class="big">🧾</div>ยังไม่มีประวัติการจ่ายเงิน</div>'}
-    <div style="height:12px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 async function setCostMode(sid, mode){
   const s = db.sessions.find(x=>x.id===sid); if(!s || !canManage(s)) return;
@@ -3776,7 +3867,7 @@ function openAdjustPay(sid){
   }).join("");
   modal(`
     <div class="modal-head"><h3>✏️ ปรับยอดจ่ายรายคน / ถอนชื่อ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0; font-size:12px;">• ใส่ยอดในช่อง = คนนั้นจ่ายตามยอดที่กำหนด (เช่น มาช้า จ่ายน้อยกว่า) — <b>ส่วนต่างจะเฉลี่ยให้คนที่เหลืออัตโนมัติ</b> เว้นว่าง = คิดอัตโนมัติตามปกติ<br>• ปุ่ม <b>− ถอน</b> ใช้ถอนชื่อคนที่ไม่ได้มาตี (ถอนไม่ได้ถ้าจ่ายแล้ว/รออนุมัติ/มีเซ็ตบันทึก)</p>
+    <p class="muted" style="margin-top:0; font-size:12px;">ใส่ยอดเอง = ส่วนต่างเฉลี่ยให้คนที่เหลือ • เว้นว่าง = คิดอัตโนมัติ • ถอนได้เฉพาะคนที่ยังไม่จ่ายและไม่มีเซ็ต</p>
     <div class="row" style="margin-bottom:8px;"><span class="muted">ค่าใช้จ่ายรวมทั้งนัด</span><b>${money(totalCost(s))}</b></div>
     ${rows || '<div class="muted">ไม่มีผู้เข้าร่วม</div>'}
     <div style="height:12px;"></div>
@@ -3907,7 +3998,6 @@ function openPayInfoEdit(sid){
   window.__qrDraft = db.settings.payQR || "";
   modal(`
     <div class="modal-head"><h3>💳 แก้ไขวิธีการจ่ายเงิน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0; font-size:12px;">ข้อความและ QR นี้จะแสดงบนหน้าการจ่ายเงินของทุกนัด</p>
     <div class="field"><label>ข้อความวิธีจ่าย (เช่น เลขบัญชี / พร้อมเพย์ / กติกาการโอน)</label>
       <textarea id="payNoteEdit" rows="4" maxlength="300" placeholder="เช่น โอนพร้อมเพย์ 08x-xxx-xxxx (ชื่อบัญชี …) หรือสแกน QR ด้านล่าง แล้วแนบสลิปในแอป" style="width:100%; background:rgba(255,255,255,.06); color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:10px; font-family:inherit; font-size:14px; resize:none;">${esc(db.settings.payNote||"")}</textarea></div>
     <div id="qrZone">${window.__qrDraft? `<img src="${window.__qrDraft}" style="width:100%; max-width:220px; display:block; margin:0 auto 8px; border-radius:12px; background:#fff;">`:`<div class="muted" style="text-align:center; font-size:12px; margin-bottom:8px;">ยังไม่มีรูป QR</div>`}</div>
@@ -4055,8 +4145,7 @@ function openPayNote(sid){
   const req = s.payReq && s.payReq[meId]; if(!req) return;
   modal(`
     <div class="modal-head"><h3>📝 ข้อความถึงผู้จัดการ</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <p class="muted" style="margin-top:0;">ข้อความสั้นๆ จะแสดงคู่กับสลิป/คำขอของคุณ เช่น โอนจากบัญชีชื่ออื่น / สลิปไม่ชัดขอส่งใหม่ / โอนรวมของ 2 คน</p>
-    <div class="field"><input type="text" id="payNoteInp" maxlength="80" value="${esc(req.note||"")}" placeholder="พิมพ์ข้อความสั้นๆ…"></div>
+    <div class="field"><input type="text" id="payNoteInp" maxlength="80" value="${esc(req.note||"")}" placeholder="เช่น โอนจากบัญชีชื่ออื่น / โอนรวม 2 คน"></div>
     <button class="btn btn-lime btn-block" onclick="savePayNote('${sid}')">💾 บันทึกข้อความ</button>
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="openPayment('${sid}')">◀️ ย้อนกลับ</button>`);
@@ -4160,7 +4249,7 @@ function openUnpaidAction(sid, mid){
     <div class="row" style="margin-bottom:10px;"><span class="muted">ยอดที่ต้องจ่าย (นัด ${fmtDateShort(s.date)})</span><b>${money(payAmt(s,mid))}</b></div>
     ${nudged? `<p class="muted" style="margin-top:0;">📣 ส่งแจ้งเตือนล่าสุดเมื่อ ${new Date(nudged.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} โดย ${emojiOf(nudged.by)} ${esc(nameOf(nudged.by))}</p>`:""}
     <button class="btn btn-lime btn-block" onclick="sendNudge('${sid}','${mid}')">📣 ส่งแจ้งเตือนให้จ่าย${nudged?" (อีกครั้ง)":""}</button>
-    <p class="muted" style="margin:6px 0 10px; font-size:11.5px;">การแจ้งเตือนจะขึ้นเด่นๆ บนหน้าแอปของ ${esc(m.name)} ทุกครั้งที่เปิดแอป จนกว่าจะจ่าย</p>
+    <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="copyNudgeMsg('${sid}','${mid}')">📋 คัดลอกข้อความทวง → วางในไลน์</button>
     <div style="height:8px;"></div>
     <button class="btn btn-blue btn-block" onclick="togglePaid('${sid}','${mid}')">✓ เปลี่ยนสถานะเป็น "จ่ายแล้ว" (รับเงินแล้ว)</button>
@@ -4321,8 +4410,7 @@ function openPendingList(){
   modal(`
     <div class="modal-head"><h3>💰 รายการรออนุมัติ (${pend.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     ${rows || '<div class="empty"><div class="big">✅</div>ไม่มีรายการค้างอนุมัติ</div>'}
-    <div style="height:8px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 
 /* =====================================================
@@ -4352,7 +4440,6 @@ function renderMembers(){
     ${turnProBtn()}
     <div class="card">
       <h3>👥 สมาชิกก๊วน (${db.members.length})</h3>
-      <p class="muted" style="margin:0 0 6px;">เรียงตามตัวอักษร • ทุกคนแก้ไขข้อมูลของตัวเองได้ • Admin แก้ไขข้อมูลได้ทุกคน • การลบ: ตัวเอง, Admin หรือผู้จัดการ</p>
       ${rows}
       <div style="height:12px;"></div>
       <button class="btn btn-lime btn-block" onclick="openAddMember()">+ เพิ่มสมาชิกใหม่</button>
@@ -4365,7 +4452,6 @@ function openAddMember(){
     <div class="modal-head"><h3>เพิ่มสมาชิกใหม่</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     <div class="field"><label>ชื่อเล่น</label><input type="text" id="amName" placeholder="เช่น เอก, มด, พี่หนุ่ม"></div>
     <div class="field"><label>ไอคอนประจำตัว</label><div class="emoji-grid" id="amEmoji">${EMOJIS.map(e=>`<div class="emoji-opt ${e===window.__selEmoji?"sel":""}" onclick="pickAmEmoji('${e}')">${e}</div>`).join("")}</div></div>
-    <p class="muted">สมาชิกใหม่จะตั้ง PIN เองตอนล็อกอินครั้งแรก</p>
     <button class="btn btn-lime btn-block" onclick="addMember()">เพิ่มเข้าก๊วน</button>`);
 }
 function pickAmEmoji(e){
@@ -4546,8 +4632,7 @@ function openTurnPro(){
       <div class="modal-head"><h3>⚡ Turn Pro</h3><button class="mclose" onclick="closeModal()">✕</button></div>
       <p class="muted" style="margin-top:0;">⏳ ส่งคำขอแล้วเมื่อ ${new Date(m.proReq.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} — รอ Admin อนุมัติ</p>
       <button class="btn btn-danger btn-block" onclick="cancelProReq()">ยกเลิกคำขอ</button>
-      <div style="height:8px;"></div>
-      <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+      `);
     return;
   }
   modal(`
@@ -4558,7 +4643,7 @@ function openTurnPro(){
     🏅 <b>ระดับมือ S / N / P</b> — เลื่อนขั้นอัตโนมัติตามแต้มมือ เริ่มต้นจากสถิติเดิมของคุณ<br>
     🎲 <b>จัดทีมสูสี</b> — เลือก 4 คน ระบบเสนอการจับคู่ที่สูสีที่สุด<br>
     ⏳ <b>คิวแฟร์</b> — เห็นว่าใครตีน้อยสุด ควรได้ลงคิวก่อน</p>
-    <p class="muted" style="font-size:12px;">คำขอจะถูกส่งให้ Admin ตรวจอนุมัติก่อน • ออกจากโหมด Pro เองได้ทุกเมื่อ สถิติแพ้ชนะปกติไม่เปลี่ยนแปลง</p>
+    <p class="muted" style="font-size:12px;">รอ Admin อนุมัติ • ออกจากโหมด Pro ได้ทุกเมื่อ</p>
     <button class="btn btn-lime btn-block" onclick="requestPro()">📨 ส่งคำขอ Turn Pro ให้ Admin</button>
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ยังก่อน</button>`);
@@ -4593,8 +4678,7 @@ function openProAdmin(){
         <span style="flex:1;">${m.emoji} ${esc(m.name)}</span>
         <button class="btn btn-ghost btn-sm" onclick="removePro('${m.id}')">− เอาออกจาก Pro</button>
       </div>`).join("") : '<div class="muted">ยังไม่มีสมาชิก Pro</div>'}
-    <div style="height:12px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 async function approvePro(mid){
   if(!isAdmin()) return;
@@ -4730,7 +4814,6 @@ function renderRank(){
         <tr><th></th><th>คู่หู</th><th style="text-align:center;">ชนะ</th><th style="text-align:center;">แพ้</th><th style="text-align:center;">Win%</th></tr>
         ${pairRows}
       </table>
-      <p class="muted" style="margin:8px 0 0; font-size:11px;">ดู Best Partner ของตัวเอง: แตะชื่อในอันดับด้านบน → ตาราง "สถิติกับคู่หู"</p>
     </div>`:""}
     ${regCard}
     ${never.length? `<div class="card"><h3>🌱 ยังไม่มีสถิติ</h3><div class="chips">${never.map(x=>`<span class="chip" style="cursor:default;"><span class="av">${x.emoji}</span>${esc(x.name)}</span>`).join("")}</div></div>`:""}
@@ -4787,8 +4870,7 @@ function openPlayerStats(id){
       <table class="tbl"><tr><th>เจอกับ</th><th style="text-align:center;">ชนะ</th><th style="text-align:center;">แพ้</th></tr>${oppRows}</table></div>`:""}
     <div class="card" style="margin-bottom:0;"><h3>📜 เซ็ตย้อนหลัง (${items.length})</h3>
       ${setRows || '<div class="empty"><div class="big">🏸</div>ยังไม่มีเซ็ตที่บันทึกไว้</div>'}</div>
-    <div style="height:12px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="closeModal()">◀️ ย้อนกลับ</button>`);
+    `);
 }
 
 /* =====================================================
@@ -4884,12 +4966,10 @@ function renderPro(){
         <tr><th></th><th>สมาชิก</th><th style="text-align:center;">ระดับ</th><th style="text-align:center;">แต้มมือ</th><th style="text-align:center;">เซ็ต</th></tr>
         ${proRows}
       </table>
-      <p class="muted" style="margin:8px 0 0; font-size:11px;">ชนะทีมแต้มมือสูงกว่า = ได้แต้มเยอะ • ชนะทีมแต้มมือต่ำกว่า = ได้แต้มน้อย — การเลือกคู่ตีจึงมีผลต่อคะแนน</p>
     </div>
 
     <div class="card">
       <h3>🎲 จัดทีมให้สูสี <span class="muted" style="font-weight:400; font-size:11px;">(เลือก 4 คน)</span></h3>
-      <p class="muted" style="margin:0 0 8px; font-size:11.5px;"><span class="chip-pro">⚡S/N/P</span> = สมาชิก Pro พร้อมระดับมือ • ตัวเลขคือแต้มมือ เรียงจากมากไปน้อย — เลือกคนที่แต้มใกล้กันจะได้คู่ที่สูสี</p>
       <div class="chips">${chips || '<span class="muted">ยังไม่มีผู้เล่นให้เลือก</span>'}</div>
       <div id="proSuggest" style="margin-top:10px;"></div>
       <button class="btn btn-lime btn-block" style="margin-top:10px;" onclick="suggestTeams()">🎲 จัดทีมจาก ${pick.length} คนที่เลือก</button>
