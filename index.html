@@ -404,7 +404,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.18b";   // ให้ตรงกับ Code.gs 11b (ฝั่งแอปไม่มีการแก้เพิ่มจาก 11a)   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.18c";   // ให้ตรงกับ Code.gs 11b (ฝั่งแอปไม่มีการแก้เพิ่มจาก 11a)   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -848,7 +848,12 @@ var SmashOps = (function(){
    • เซิร์ฟเวอร์ 18a: ส่งเฉพาะเหตุการณ์ (ไม่ถึง 1 KB) เซิร์ฟเวอร์รวมให้ ไม่มีการทับกัน
    • เซิร์ฟเวอร์เก่า: ยังส่งก้อนเต็ม และใช้คิวนี้กู้คืนเมื่อชนเหมือนเดิม */
 let __pend = [];
-function pendLoad(){ try{ __pend = JSON.parse(lsGet(PEND_LS)||"[]") || []; }catch(e){ __pend = []; } }
+/* [18c] รายการคิวรุ่นก่อน 18a ไม่มี id — ทิ้งตอนโหลด ไม่งั้นจะถูกนำมาทำซ้ำใส่ข้อมูลใหม่ทุกรอบ poll และไม่มีวันหมดอายุ
+   (พบจากเครื่องที่อัปจาก 15a แล้วยังถือรายการ "ยกเลิกจ่าย" ค้างอยู่ — ส่วนกลางปฏิเสธรายการไร้ id อยู่แล้ว แต่เครื่องนั้นเห็นภาพเพี้ยน) */
+function pendLoad(){
+  try{ __pend = (JSON.parse(lsGet(PEND_LS)||"[]") || []).filter(p=> p && p.id && p.kind); }catch(e){ __pend = []; }
+  pendStore();
+}
 function pendStore(){ try{ lsSet(PEND_LS, JSON.stringify(__pend)); }catch(e){} }
 const PEND_MAX = 300;
 function pendAdd(kind, payload){
@@ -873,7 +878,7 @@ function pendPresent(p){ return SmashOps.done(db, p.id); }
 /* ทิ้งรายการที่ขึ้นฐานกลางแล้ว — เรียกหลังบันทึกก้อนเต็มสำเร็จ (โหมดเหตุการณ์ใช้ acked จากเซิร์ฟเวอร์แทน) */
 function pendSync(){
   const now = Date.now();
-  __pend = __pend.filter(p => !pendPresent(p) && (SYNC.opMode || (now - p.at) < 1800000));
+  __pend = __pend.filter(p => p && p.id && !pendPresent(p) && (SYNC.opMode || (now - p.at) < 1800000));
   pendStore();
 }
 /* ใส่รายการของเราที่ยังไม่ขึ้นฐานกลางกลับเข้าไปในข้อมูลชุดใหม่ที่รับมา */
