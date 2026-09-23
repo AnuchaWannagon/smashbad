@@ -404,7 +404,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.18c";   // ให้ตรงกับ Code.gs 11b (ฝั่งแอปไม่มีการแก้เพิ่มจาก 11a)   // ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.24a";   // คู่กับ Code.gs 24a (delta read) - ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -535,6 +535,7 @@ let seenRev = -1;
 
 /* ---------- ตัวชี้วัดการซิงก์ (ไว้วินิจฉัยว่า "ช้า/ไม่สำเร็จ" เกิดจากอะไร) ---------- */
 const SYNC = { lastMs:0, lastAt:0, okAt:0, fails:0, saveFails:0, bytes:0, pending:false, lastErr:"",
+  deltaN:0, deltaMiss:0, fullN:0,   // [24a] จำนวนครั้งที่รับแบบ delta / ประกอบไม่ผ่าน / รับข้อมูลเต็ม
   blocked:null,        // ระบบกลางปฏิเสธการแก้ไขล่าสุดของเรา (เก็บเหตุผล + สำเนาที่ถูกปฏิเสธ)
   newerVer:"",         // พบว่าเพื่อนใช้แอปรุ่นใหม่กว่าเครื่องนี้
   bootStale:false,     // เปิดแอปจากสำเนาในเครื่องเพราะติดต่อชีตไม่ได้
@@ -755,7 +756,18 @@ var SmashOps = (function(){
         if(num(s.paidAt[p.mid]) >= num(p.at)) return false;
         if(!s.paid) s.paid = {}; if(!s.payInfo) s.payInfo = {};
         s.paid[p.mid] = !!p.v;
-        if(p.v){ if(p.info) s.payInfo[p.mid] = p.info; if(s.payReq) delete s.payReq[p.mid]; if(s.payNudge) delete s.payNudge[p.mid]; }
+        if(p.v){
+          if(p.info){
+            /* [24a] ผสานข้อมูลรูปสลิปแทนการทับ - เครื่องผู้จัดการอาจกดอนุมัติก่อนได้รับลิงก์ Drive (slipfix)
+               เดิมสำเนาของผู้จัดการ (ยังไม่มีลิงก์) ทับลิงก์ที่ขึ้นไปแล้ว ทำให้สลิปหาย (พบ 2 รายการ 23 ก.ย. 69) */
+            x = (s.payReq && s.payReq[p.mid]) || s.payInfo[p.mid] || null;
+            v = JSON.parse(JSON.stringify(p.info));
+            if(x && x.slipUrl && !v.slipUrl){ v.slipUrl = x.slipUrl; v.slipId = x.slipId || null; v.slip = null; v.slipPending = false; }
+            else if(x && x.slip && !v.slip && !v.slipUrl){ v.slip = x.slip; v.slipPending = false; }
+            s.payInfo[p.mid] = v;
+          }
+          if(s.payReq) delete s.payReq[p.mid]; if(s.payNudge) delete s.payNudge[p.mid];
+        }
         else { delete s.payInfo[p.mid]; if(p.req){ if(!s.payReq) s.payReq = {}; s.payReq[p.mid] = p.req; } }
         s.paidAt[p.mid] = p.at; return true;
       case "slipurl":
@@ -831,6 +843,21 @@ var SmashOps = (function(){
     return false;
   }
 
+  /* [24a] ลายนิ้วมือของข้อมูล - ใช้ตรวจว่าเครื่องที่ประกอบข้อมูลจากเหตุการณ์ (delta) ได้ผลตรงกับเซิร์ฟเวอร์
+     นับโครงสร้างสำคัญ (นัด สถานะ เซ็ต ผู้ร่วมตี การจ่าย สมาชิก กระดาน) ถ้าไม่ตรง แอปจะขอข้อมูลเต็มแทน */
+  function fp(db){
+    var parts = [ (db.members || []).length, (db.board || []).length ];
+    (db.sessions || []).forEach(function(s){
+      var pd = 0; Object.keys(s.paid || {}).forEach(function(k){ if(s.paid[k]) pd++; });
+      var su = 0; Object.keys(s.payInfo || {}).forEach(function(k){ var w = s.payInfo[k]; if(w && w.slipUrl) su++; });
+      parts.push(s.id + "." + (s.status || "") + "." + (s.sets || []).length + "." + (s.attendees || []).length + "." + pd + "." +
+        Object.keys(s.payReq || {}).length + "." + Object.keys(s.payInfo || {}).length + "." + su + "." + num(s.shuttlesUsed));
+    });
+    var str = parts.join("|"), h = 5381;
+    for(var i=0; i<str.length; i++){ h = ((h << 5) + h + str.charCodeAt(i)) | 0; }
+    return (h >>> 0).toString(36) + "." + (db.sessions || []).length;
+  }
+
   function apply(db, op){
     if(!db || !op || !op.kind) return false;
     if(done(db, op.id)) return false;
@@ -839,7 +866,7 @@ var SmashOps = (function(){
     mark(db, op.id);
     return changed;
   }
-  return { apply: apply, done: done, mark: mark, slipFix: slipFix, clientClear: clientClear, pruneList: pruneList, OPIDS_MAX: OPIDS_MAX };
+  return { apply: apply, done: done, mark: mark, slipFix: slipFix, clientClear: clientClear, pruneList: pruneList, fp: fp, OPIDS_MAX: OPIDS_MAX };
 })();
 /* === SMASH-OPS END === */
 
@@ -907,6 +934,29 @@ function pruneSlips(days){
   return n;
 }
 
+/* ---------- [24a] ฐานจากส่วนกลาง (สำหรับ delta read) ----------
+   __base = สำเนา "ตามที่เซิร์ฟเวอร์มี" ณ rev หนึ่ง (ไม่รวมรายการค้างส่งของเรา) เก็บเป็นสตริง
+   เมื่อ poll แล้ว rev เปลี่ยน เซิร์ฟเวอร์ 24a ส่งเฉพาะเหตุการณ์ที่ขาด → แอปประกอบจากฐานด้วย SmashOps ชุดเดียวกับเซิร์ฟเวอร์
+   แล้วเทียบลายนิ้วมือ (fp) ทุกช่วง ไม่ตรง = ทิ้งฐาน แล้วขอข้อมูลเต็มตามเดิม - ผลลัพธ์จึงเท่ากับการรับข้อมูลเต็มทุกประการ */
+let __base = null;
+function baseSet(obj){
+  try{ __base = obj? { rev:Number(obj.rev)||0, tok:String(obj.saveTok||""), raw:JSON.stringify(obj) } : null; }catch(e){ __base = null; }
+}
+function baseBuild(entries){
+  if(!__base || !Array.isArray(entries) || !entries.length) return null;
+  let o = null; try{ o = JSON.parse(__base.raw); }catch(e){ return null; }
+  let r = __base.rev;
+  for(const en of entries){
+    if(!en || en.r <= r) continue;
+    if(en.r !== r + 1) return null;                         // ขาดช่วง
+    (en.o || []).forEach(x=>{ SmashOps.apply(o, x); });
+    if(en.c){ if(!o.clients) o.clients = {}; Object.keys(en.c).forEach(id=>{ o.clients[id] = Object.assign(o.clients[id]||{}, en.c[id]); }); }
+    o.rev = en.r; o.saveTok = en.t; if(en.v) o.appVer = en.v; r = en.r;
+    if(en.f && SmashOps.fp(o) !== en.f) return null;        // ประกอบแล้วไม่ตรงกับเซิร์ฟเวอร์
+  }
+  return o;
+}
+
 /* ---------- อ่าน/เขียนฐานข้อมูลกลาง (Google Sheet ผ่าน Apps Script) ---------- */
 /* knownRev: ส่ง rev ที่เครื่องนี้ยืนยันแล้วไปด้วย — ถ้าชีตยังอยู่ rev เดิม เซิร์ฟเวอร์ (รุ่น 05c ขึ้นไป) จะตอบสั้นๆ
    {same:true} ~60 ไบต์ แทนข้อมูลทั้งก้อน ~600 KB → poll ทุก 6 วินาทีตอนกำลังตีจึงแทบไม่กินเน็ต
@@ -918,7 +968,9 @@ async function gasLoad(knownRev, timeoutMs, knownTok){
   try{
     /* [11a] ส่ง tok (saveTok) ไปด้วย — เซิร์ฟเวอร์ 11a จะตอบ same เฉพาะเมื่อ rev และ tok ตรงทั้งคู่ (เซิร์ฟเวอร์รุ่นก่อนเพิกเฉย tok) */
     const q = "api=1&k=" + encodeURIComponent(clubKey()) + (knownRev!=null && knownRev>=0 ? "&rev=" + knownRev + (knownTok? "&tok=" + encodeURIComponent(knownTok) : "") : "");
-    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q, {method:"GET"}, tmo);
+    /* [24a] ขอแบบ delta เมื่อถือฐานของ rev นั้นอยู่จริง (ไม่งั้นประกอบไม่ได้) */
+    const wantD = SYNC.opMode && knownRev!=null && knownRev>=0 && knownTok && __base && __base.rev===Number(knownRev) && __base.tok===String(knownTok);
+    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q + (wantD? "&d=1" : ""), {method:"GET"}, tmo);
     const txt = await res.text();
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = txt.length;
     const out = JSON.parse(txt);
@@ -932,9 +984,15 @@ async function gasLoad(knownRev, timeoutMs, knownTok){
       gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = "";
       SYNC.opMode = !!out.ops; lsSet("smash-opmode", SYNC.opMode? "1":"0");   // [18a] เซิร์ฟเวอร์บอกว่ารับเหตุการณ์ได้ (จำไว้ให้บูตครั้งหน้าใช้ทันที)
       if(out.same){ seenRev = Number(out.rev)||seenRev; return "same"; }   // ชีตยังไม่เปลี่ยน
+      if(out.delta){
+        const o = baseBuild(out.e);
+        if(o && Number(o.rev)===Number(out.rev)){ baseSet(o); SYNC.deltaN++; seenRev = Number(o.rev)||0; checkVer(o); return o; }
+        SYNC.deltaMiss++; __base = null;                   // ประกอบไม่ผ่าน → ขอข้อมูลเต็มรอบนี้เลย
+        return await gasLoad(null, timeoutMs);
+      }
       /* บันทึกเป็น "เห็นแล้ว" เท่านั้น — serverRev จะขยับก็ต่อเมื่อเรารับข้อมูลชุดนี้มาไว้ใน db จริง */
       seenRev = out.data? (Number(out.data.rev)||0) : 0;
-      if(out.data){ checkVer(out.data); return out.data; }
+      if(out.data){ baseSet(out.data); SYNC.fullN++; checkVer(out.data); return out.data; }
       serverRev = 0;   // ชีตยังว่าง — จะถูกเติมเมื่อบันทึกครั้งแรก
       return null;
     }
@@ -958,7 +1016,7 @@ async function gasSave(){
       const out = await res.json();
       SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
       if(out && out.ops && !SYNC.opMode){ SYNC.opMode = true; lsSet("smash-opmode","1"); }   // [18b] เซิร์ฟเวอร์รับเหตุการณ์ได้ — ครั้งถัดไปส่งเหตุการณ์
-      if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; seenRev = serverRev; __forceNext = null; __fullNext = false; SYNC.blocked = null; pendSync(); return true; }
+      if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; seenRev = serverRev; __forceNext = null; __fullNext = false; SYNC.blocked = null; pendSync(); try{ __base = { rev:serverRev, tok:String(db.saveTok||""), raw:lastRaw }; }catch(e){ __base = null; } return true; }
       if(out && out.ok===false && out.error==="app-outdated"){
         /* เซิร์ฟเวอร์ตั้งรุ่นต่ำสุดไว้ — เครื่องนี้ต้องโหลดแอปใหม่ก่อน */
         SYNC.newerVer = out.minVer || "ใหม่กว่า"; showVerOverlay();
@@ -967,7 +1025,7 @@ async function gasSave(){
         gasOK = true; return false;
       }
       if(out && out.conflict && out.data){
-        gasOK = true;
+        gasOK = true; baseSet(out.data);   // [24a]
         if(out.blocked){
           /* ระบบกลางปฏิเสธการแก้ไขของเรา (เช่น ข้อมูลลดลงผิดปกติ)
              — เก็บสำเนาที่ถูกปฏิเสธไว้ให้ผู้จัดการตัดสิน แล้วรับข้อมูลจริงมาแทนทั้งก้อน
@@ -1066,7 +1124,8 @@ async function gasSendOps(){
   const client = (db.clients && meId && db.clients[meId]) ? Object.assign({ id:meId }, db.clients[meId]) : null;
   const t0 = Date.now();
   try{
-    const body = JSON.stringify({ op:1, k:clubKey(), by:(meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน"), appVer:APP_VER, baseRev:serverRev, ops, client });
+    const baseRev = serverRev;
+    const body = JSON.stringify({ op:1, d:1, baseTok:(__base && __base.rev===baseRev)? __base.tok : "", k:clubKey(), by:(meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน"), appVer:APP_VER, baseRev, ops, client });
     const res = await fetchT(url, {method:"POST", body}, NET_POST_MS);
     const out = await res.json();
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
@@ -1075,7 +1134,7 @@ async function gasSendOps(){
       SYNC.lastErr = "แอปในเครื่องนี้เป็นรุ่นเก่า (" + APP_VER + ") เซิร์ฟเวอร์ไม่รับการบันทึก";
       noteIssue("รุ่นเก่า ถูกเซิร์ฟเวอร์ปฏิเสธ"); gasOK = true; return false;
     }
-    if(!(out && out.ok)){ SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธเหตุการณ์" + (out && out.error? " ("+out.error+")" : ""); gasOK = false; SYNC.saveFails++; noteIssue("บันทึกไม่สำเร็จ: " + SYNC.lastErr); return false; }
+    if(!(out && out.ok)){ SYNC.lastErr = (out && out.error==="busy")? "เซิร์ฟเวอร์มีคิวบันทึกยาว - จะส่งให้อีกครั้งอัตโนมัติ" : ("เซิร์ฟเวอร์ปฏิเสธเหตุการณ์" + (out && out.error? " ("+out.error+")" : "")); gasOK = false; SYNC.saveFails++; noteIssue("บันทึกไม่สำเร็จ: " + SYNC.lastErr); return false; }
     gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = "";
     const acked = {}; (out.acked||[]).forEach(id=>{ acked[id] = true; });
     (out.denied||[]).forEach(d=>{ acked[d.id] = true; });
@@ -1084,10 +1143,19 @@ async function gasSendOps(){
       noteIssue("เซิร์ฟเวอร์ไม่รับ " + out.denied.length + " รายการ: " + out.denied.map(d=>d.reason).join(" | "));
       toast("⚠️ ระบบกลางไม่รับ " + out.denied.length + " รายการ (" + out.denied[0].reason + ") — ข้อมูลถูกปรับตามส่วนกลาง", true);
     }
-    if(out.data){
-      /* เราตามหลังส่วนกลางอยู่ → รับข้อมูลเต็มมาเป็นฐาน แล้วเติมเหตุการณ์ที่ยังไม่ขึ้นกลับเข้าไป */
-      checkVer(out.data);
-      db = out.data; serverRev = seenRev = Number(db.rev)||0;
+    /* [24a] เซิร์ฟเวอร์ส่งเฉพาะช่วงที่เราขาด (out.e) → ประกอบจากฐาน ถ้าไม่ผ่านขอข้อมูลเต็ม */
+    let full = out.data || null;
+    if(full) baseSet(full);
+    else if(out.e){
+      full = baseBuild(out.e);
+      if(full && Number(full.rev)===Number(out.rev)){ baseSet(full); SYNC.deltaN++; }
+      else { SYNC.deltaMiss++; __base = null; full = await gasLoad(); if(full==="same") full = null; }
+    }
+    if(!full && !out.e){ baseAfterAck(ops, acked, baseRev, out, client); }
+    if(full){
+      /* เราตามหลังส่วนกลาง → รับข้อมูลเต็มมาเป็นฐาน แล้วเติมเหตุการณ์ที่ยังไม่ขึ้นกลับเข้าไป */
+      checkVer(full);
+      db = full; serverRev = seenRev = Number(db.rev)||0;
       const n = pendReapply();
       lastRaw = JSON.stringify(db); cacheSave();
       if(meId && !mem(meId)){ toast("บัญชีของคุณถูกนำออกจากก๊วน", true); logout(); return true; }
@@ -1103,6 +1171,22 @@ async function gasSendOps(){
     SYNC.fails++; SYNC.lastErr = netErr(e, NET_POST_MS);
     gasOK = false; SYNC.saveFails++; noteIssue("บันทึกไม่สำเร็จ: " + SYNC.lastErr); return false;
   }
+}
+
+/* [24a] ส่งเหตุการณ์สำเร็จโดยไม่มีใครแทรก → ฐานใหม่ = ฐานเดิม + เหตุการณ์ของเราที่ถูกรับ (ลำดับเดียวกับเซิร์ฟเวอร์) */
+function baseAfterAck(ops, acked, baseRev, out, client){
+  try{
+    const newRev = Number(out.rev)||0;
+    if(!__base || __base.rev !== baseRev){ __base = null; return; }
+    if(newRev === baseRev) return;                        // ไม่มีอะไรเปลี่ยน (ซ้ำทั้งหมด)
+    if(newRev !== baseRev + 1){ __base = null; return; }
+    const o = JSON.parse(__base.raw);
+    ops.forEach(x=>{ if(acked[x.id]) SmashOps.apply(o, x); });
+    if(client && client.id){ if(!o.clients) o.clients = {}; const c = Object.assign({}, client); delete c.id; o.clients[client.id] = Object.assign(o.clients[client.id]||{}, c); }
+    o.rev = newRev; if(out.saveTok) o.saveTok = out.saveTok; o.appVer = APP_VER;
+    if(out.f && SmashOps.fp(o) !== out.f){ __base = null; SYNC.deltaMiss++; return; }
+    baseSet(o);
+  }catch(e){ __base = null; }
 }
 
 /* ---------- บันทึก: ลงเครื่องก่อนเสมอ แล้วค่อยส่งขึ้นส่วนกลาง (กันงานซ้อนกันด้วย mutex) ---------- */
@@ -1323,8 +1407,12 @@ function fmtAgo(t){
   if(m < 1) return "เมื่อครู่"; if(m < 60) return m + " นาที"; const h = Math.round(m/60);
   if(h < 48) return h + " ชม."; return Math.round(h/24) + " วัน";
 }
-function openClientHealth(){
+function openClientHealth(fresh){
   if(!canSeeHealth()) return toast("เฉพาะ Admin/ผู้จัดการ", true);
+  /* [24a] สถานะเครื่องที่ไม่เปลี่ยน rev ไม่มากับ delta - เปิดหน้านี้เมื่อไหร่ ดึงข้อมูลเต็มหนึ่งครั้งเบื้องหลังแล้ววาดใหม่ */
+  if(!fresh && !__saving && !SYNC.pending){
+    gasLoad(null).then(function(r){ if(r && typeof r==="object"){ if(r.clients) db.clients = r.clients; if(r.healthAck!=null){ db.healthAck = r.healthAck; db.healthAckAt = r.healthAckAt; } if(modalOpen()) openClientHealth(true); } }).catch(function(){});
+  }
   const h = healthIssues();
   const rows = h.rows.map(r=>`
     <tr style="${r.hasIssue? "background:rgba(255,92,92,.10);" : r.isOld? "background:rgba(255,194,75,.10);" : ""}">
@@ -1455,6 +1543,7 @@ function openSyncInfo(){
     <div class="row" style="margin-bottom:6px;"><span class="muted">เวลาซิงก์ครั้งล่าสุด</span><b>${SYNC.lastMs? SYNC.lastMs+" ms":"-"}</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">ล้มเหลวสะสม (อ่าน/บันทึก)</span><b>${SYNC.fails} / ${SYNC.saveFails}</b></div>
     <div class="row" style="margin-bottom:6px;"><span class="muted">rev ที่ยืนยันแล้ว / ที่เห็นบนชีต</span><b>${serverRev} / ${seenRev}</b></div>
+    <div class="row" style="margin-bottom:6px;"><span class="muted">รับแบบย่อ (delta) / รับเต็ม</span><b>${SYNC.deltaN} / ${SYNC.fullN}${SYNC.deltaMiss? " (ประกอบไม่ผ่าน "+SYNC.deltaMiss+")":""}</b></div>
     ${canSeeHealth()? `<button class="btn btn-ghost btn-block" style="margin:6px 0 10px;" onclick="openClientHealth()">🩺 สุขภาพเครื่องสมาชิก (Admin)</button>` : ""}
     <div class="row" style="margin-bottom:6px;"><span class="muted">รายการค้างส่งในเครื่อง</span><b>${__pend.length} รายการ</b></div>
     ${SYNC.lastErr? `<div class="row" style="margin-bottom:6px;"><span class="muted">ข้อความล่าสุด</span><b style="font-weight:600;font-size:12px;text-align:right;max-width:60%;">${esc(SYNC.lastErr)}</b></div>` : ""}
@@ -1465,9 +1554,7 @@ function openSyncInfo(){
     ${heavy? `<div class="banner-warn">⚠️ ข้อมูลใหญ่กว่าปกติ — ส่วนใหญ่มาจากรูปสลิป ทำให้ซิงก์ช้าและหลุดง่าย${mg? " กดปุ่ม “ลดขนาดข้อมูล” ด้านล่างได้":""}</div>`:""}
     ${ok? "" : '<p class="muted" style="margin-top:0; font-size:12px;">ซิงก์ไม่สำเร็จ: ตรวจอินเทอร์เน็ตแล้วกด “ลองเชื่อมต่อใหม่” — ข้อมูลที่ค้างไม่หายไปไหน</p>'}
     <button class="btn btn-lime btn-block" onclick="retrySync()">🔄 ลองเชื่อมต่อใหม่</button>
-    ${mg && embeddedSlips().length? `<div style="height:8px;"></div><button class="btn btn-lime btn-block" onclick="migrateSlipsToDrive()">☁️ ย้ายสลิปที่ฝังอยู่ ${embeddedSlips().length} รูปขึ้น Drive (ลดข้อมูลได้มากที่สุด)</button>`:""}
-    ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="cleanSlipsNow()">🧹 ลดขนาดข้อมูล (ตัดรูปสลิปเก่ากว่า ${SLIP_KEEP_DAYS} วัน)</button>`:""}
-    ${mg && slips? `<div style="height:8px;"></div><button class="btn btn-danger btn-block" onclick="cleanSlipsAll()">🧹 ตัดรูปสลิป<b>ทั้งหมด</b>ของนัดที่จบแล้ว (${slips} รูป)</button>`:""}
+    ${mg && slips? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="reduceSlips()">🧹 ลดขนาดข้อมูล (รูปสลิปในข้อมูล ${slips} รูป)</button>`:""}
     ${mg? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="closeModal(); openGasSetup();">⚙️ ตั้งค่าการเชื่อมต่อ (Admin/ผู้จัดการ)</button>`:""}
     `);
 }
@@ -1504,6 +1591,17 @@ async function migrateSlipsToDrive(){
   }
   if(ok){ await storeSave({wait:true}); }
   toast(ok? ("☁️ ย้ายสลิปขึ้น Drive แล้ว " + ok + " รูป" + (fail? " (ไม่สำเร็จ " + fail + ")":"") + " — ข้อมูลเหลือ " + fmtKB(dbBytes())) : "อัปโหลดขึ้น Drive ไม่สำเร็จ ตรวจ URL อัปโหลดสลิป", !ok);
+  openSyncInfo();
+}
+/* [24a] ปุ่มเดียวแทน 3 ปุ่มเดิม: ย้ายขึ้น Drive ก่อน (ไม่เสียรูป) - รูปที่ยังเหลือในนัดที่จบแล้ว ถามก่อนตัด */
+async function reduceSlips(){
+  if(!(isAdmin()||isDefaultMgr())) return;
+  if(slipUploadUrl() && embeddedSlips().length){ await migrateSlipsToDrive(); }
+  const left = SmashOps.pruneList(db, Date.now(), true).length;
+  if(left && confirm("ยังมีรูปสลิปในข้อมูล " + left + " รูป (นัดที่จบแล้ว) - ตัดรูปออกเพื่อให้ซิงก์เร็วขึ้นไหม?\nยอดเงิน วิธีจ่าย และผู้อนุมัติยังอยู่ครบ")){
+    op("prune", { cut:Date.now(), all:true }); await storeSave({wait:true});
+    toast("🧹 ตัดรูปสลิปออก " + left + " รูป - ข้อมูลเหลือ " + fmtKB(dbBytes()));
+  }
   openSyncInfo();
 }
 async function cleanSlipsNow(){
@@ -4281,18 +4379,28 @@ async function slipUploadBg(sid, mid, dataUrl, label){
   const key = sid+"|"+mid; if(__slipUp[key]) return; __slipUp[key] = true;
   try{
     let fix = null;
-    const up = slipUploadUrl()? await uploadSlipToDrive(dataUrl, label) : null;
+    const hasUp = !!slipUploadUrl();
+    const up = hasUp? await uploadSlipToDrive(dataUrl, label) : null;
     if(up) fix = { url:up.slipUrl, id:up.slipId };
-    else { let d = dataUrl; if(d.length > 120000) d = await shrinkDataUrl(d, 430, 0.45); fix = { slip:d }; }
+    else if(hasUp){
+      /* [24a] อัปโหลดไม่สำเร็จ: ไม่ฝังรูปลงข้อมูลกลางแล้ว (รูปละ ~120 KB ทำให้ทุกเครื่องโหลดหนัก)
+         เก็บไว้ในเครื่องผู้จ่าย แล้วลองใหม่เองแบบเว้นระยะ 30 วิ → 2 → 5 → 10 นาที (และทุกครั้งที่เปิดแอป) */
+      const n = (__slipTry[key]||0) + 1; __slipTry[key] = n;
+      const wait = [30000, 120000, 300000, 600000][Math.min(3, n-1)];
+      setTimeout(function(){ const d = slipOutboxGet(sid, mid); if(d) slipUploadBg(sid, mid, d, label); }, wait);
+      if(n===1) toast("อัปโหลดรูปสลิปยังไม่สำเร็จ - แอปจะส่งให้เองอัตโนมัติ (คำขอจ่ายถึงผู้จัดการแล้ว)", true);
+      delete __slipUp[key]; return;
+    }
+    else { let d = dataUrl; if(d.length > 120000) d = await shrinkDataUrl(d, 430, 0.45); fix = { slip:d }; }   // ไม่ได้ตั้งค่า Slip Uploader เลย (ท่าเดิม)
     const s = db.sessions.find(x=>x.id===sid);
     const v = s && ((s.payReq && s.payReq[mid]) || (s.payInfo && s.payInfo[mid]));
     if(v && v.slipPending){ op("slipfix", { sid, mid, fix }); await storeSave(); }
-    slipOutboxDel(sid, mid);
+    slipOutboxDel(sid, mid); delete __slipTry[key];
     if(meId && !modalOpen()) renderAll();
-    if(!up) toast("อัปโหลดสลิปขึ้น Drive ไม่สำเร็จ — เก็บรูปไว้ในระบบแทน", true);
   }catch(e){}
   delete __slipUp[key];
 }
+let __slipTry = {};
 function applySlipFix(v, fix){ return SmashOps.slipFix(v, fix); }
 /* เปิดแอปมาแล้วยังมีรูปค้างอัปโหลด (ปิดแอปก่อนส่งเสร็จ) → ส่งต่อให้เอง */
 function slipOutboxResume(){
@@ -5381,8 +5489,13 @@ async function delDoneSession(sid){
 let __pollTimer = null, __pollFail = 0, __pendingRemote = null;
 function pollDelay(){
   if(__pollFail) return Math.min(60000, 8000 * Math.pow(2, Math.min(3, __pollFail)));
-  const playing = db && db.sessions && db.sessions.some(x=>x.status==="playing");
-  return playing? 8000 : 30000;   // [17a] 6/20 → 8/30 วิ: 40 เครื่องยิงพร้อมกันทำให้ Apps Script คิวยาวจนหมดเวลารอ
+  /* [24a] ถี่ 8 วิเฉพาะเครื่องที่ "อยู่ในนัดที่กำลังตี" (ลงชื่อ/เป็นผู้จัดการ) หรือ Admin - คนอื่น 30 วิ
+     และสุ่มเหลื่อม ±25% ไม่ให้ทุกเครื่องยิงพร้อมกันหลังมีคนบันทึก */
+  const me = meId;
+  const inPlay = db && db.sessions && db.sessions.some(x=> x.status==="playing" &&
+    (isAdmin() || x.managerId===me || (x.attendees||[]).some(a=>a.memberId===me)));
+  const base = inPlay? 8000 : 30000;
+  return Math.round(base * (0.75 + Math.random()*0.5));
 }
 function schedulePoll(){
   clearTimeout(__pollTimer);
@@ -5449,6 +5562,7 @@ async function init(){
   if(gasUrl() && cached && Number(cached.rev)>0){
     window.__booting = false;
     lastRaw = JSON.stringify(db);
+    if(!__pend.length) __base = { rev:Number(cached.rev)||0, tok:String(cached.saveTok||""), raw:lastRaw };   // [24a] ฐานสำหรับ delta (ถ้าไม่ตรงกับเซิร์ฟเวอร์ ลายนิ้วมือจะจับได้แล้วขอข้อมูลเต็ม)
     SYNC.bootSyncing = true;
     await finishInit(false);
     bootSync(cached);              // ไม่ await — ให้แอปใช้งานได้ระหว่างรอ
