@@ -57,6 +57,16 @@ input,select{ font-family:'Noto Sans Thai',sans-serif; }
 .cloud-chip.saving{ animation:chipPulse 1.2s ease-in-out infinite; }
 @keyframes chipPulse{ 0%,100%{ opacity:1; } 50%{ opacity:.55; } }
 /* [15a] ปุ่มกำลังทำงาน: แสดงนาฬิกาทราย และกันกดซ้ำ */
+/* [25a] หน้าจอรอแบบเต็มจอ: นาฬิกาทรายใหญ่ กันกดปุ่มอื่นระหว่างรอ */
+#busyOv{ position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; background:rgba(8,12,26,.62); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
+#busyOv.on{ display:flex; }
+#busyOv .bi{ font-size:88px; line-height:1; animation:busySpin 1.2s ease-in-out infinite; }
+#busyOv .bt{ font-size:18px; font-weight:800; color:#fff; text-align:center; padding:0 24px; }
+.paycard .pline{ display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px dashed rgba(255,255,255,.12); }
+.paycard .pline:last-child{ border-bottom:none; }
+.paycard .ptxt{ flex:1; font-size:15px; line-height:1.5; -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; word-break:break-word; }
+.paycard .pnum{ font-weight:800; letter-spacing:.3px; color:var(--lime); }
+.paycard .pcopy{ flex:none; padding:8px 12px; font-size:14px; }
 button.busy{ opacity:.6; pointer-events:none; position:relative; }
 button.busy > *{ visibility:hidden; }
 button.busy::after{ content:"⏳"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:18px; visibility:visible; animation:busySpin 1.2s ease-in-out infinite; }
@@ -369,6 +379,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
   <div class="wrap">
     <div id="storageWarn" style="display:none;" class="banner-warn">⚠️ โหมดทดลอง: ระบบบันทึกข้อมูลกลางใช้ไม่ได้ ข้อมูลจะหายเมื่อปิดหน้า</div>
     <div id="healthWarn" style="display:none; cursor:pointer;" class="banner-warn" onclick="openClientHealth()"></div>
+    <div id="msgWarn" style="display:none; cursor:pointer; background:rgba(198,242,78,.12); border-color:rgba(198,242,78,.5); color:var(--lime); font-weight:700;" class="banner-warn" onclick="openMsgBox()"></div>
     <div class="view" id="v-play"></div>
     <div class="view" id="v-members"></div>
     <div class="view" id="v-rank"></div>
@@ -377,7 +388,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
   </div>
 
   <div class="bottomnav"><div class="bottomnav-in">
-    <button class="bn-item on" data-v="play" onclick="go('play')"><span class="ic">🏸</span>นัดตี</button>
+    <button class="bn-item on" data-v="play" onclick="go('play')"><span class="ic">🏸</span>เปิดตี</button>
     <button class="bn-item" data-v="members" onclick="go('members')"><span class="ic">👥</span>สมาชิก</button>
     <button class="bn-item" data-v="rank" onclick="go('rank')"><span class="ic">🏆</span>สถิติ</button>
     <button class="bn-item" data-v="history" onclick="go('history')"><span class="ic">🗂️</span>ประวัติ</button>
@@ -388,6 +399,7 @@ table.tbl tr:last-child td{ border-bottom:none; }
 <div id="toast"></div>
 <div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>
 <div id="cloudChip" class="cloud-chip" aria-live="polite"></div>
+<div id="busyOv" aria-live="assertive"><div class="bi">⏳</div><div class="bt" id="busyOvT">กำลังทำงาน… รอสักครู่</div></div>
 
 <script>
 /* =====================================================
@@ -404,7 +416,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.24a";   // คู่กับ Code.gs 24a (delta read) - ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.09.25a";   // [25a] ใช้กับ Code.gs 24a ได้ (ไม่ต้องแก้ฝั่งเซิร์ฟเวอร์) - delta read - ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -597,10 +609,28 @@ async function fetchT(url, opts, ms){
 /* แปลงข้อผิดพลาดให้เป็นข้อความสั้นๆ ที่วินิจฉัยต่อได้ (แสดงในหน้าสถานะการเชื่อมต่อ) */
 function netErr(e, ms){
   if(!e) return "ไม่ทราบสาเหตุ";
-  if(e.name==="AbortError") return "หมดเวลารอ (>"+Math.round(ms/1000)+" วิ) — ฝั่ง Google ตอบช้าหรือข้อมูลใหญ่เกินไป";
-  if(e instanceof SyntaxError) return "คำตอบจากเซิร์ฟเวอร์ไม่ใช่ข้อมูลที่อ่านได้ (มักเป็นหน้า error/ขอสิทธิ์ของ Apps Script)";
+  if(e.name==="AbortError") return "หมดเวลารอ (>"+Math.round(ms/1000)+" วิ)";
+  /* [25a] เก็บหัวข้อของหน้า error ที่ Google ส่งมาจริง (เดิมทิ้งไป จึงไม่รู้ว่าเป็น error ชนิดใด) */
+  if(e.srv) return "เซิร์ฟเวอร์ขัดข้องชั่วคราว (" + String(e.message||"").slice(0,90) + ")";
+  if(e.nonJson) return "Google ตอบเป็นหน้า error (HTTP " + e.status + ": " + (e.snip||"-") + ")";
+  if(e instanceof SyntaxError || /expected pattern|JSON/i.test(String(e.message||""))) return "Google ตอบเป็นหน้า error (อ่านไม่ได้)";
   return "เชื่อมต่อไม่ได้: " + (e.message||e);
 }
+/* [25a] อ่านคำตอบเป็น JSON — ถ้าไม่ใช่ JSON ให้ดึงข้อความสั้นๆ ของหน้า error ติดไปกับข้อผิดพลาด */
+function errSnip(txt){
+  let s = String(txt||"");
+  const m = s.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const body = s.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/\s+/g," ").trim();
+  s = (m? m[1].trim() + " | " : "") + body;
+  return s.slice(0, 110);
+}
+async function readJson(res){
+  const txt = await res.text();
+  try{ return { out: JSON.parse(txt), len: txt.length }; }
+  catch(e){ const er = new Error("nonjson"); er.nonJson = true; er.status = res.status; er.snip = errSnip(txt); throw er; }
+}
+/* [25a] ข้อผิดพลาดชั่วคราวที่ควรลองใหม่ทันที (Google ตอบหน้า error / เน็ตหลุด) — ไม่รวมหมดเวลารอ */
+function transientErr(e){ return !!(e && e.name!=="AbortError" && (e.nonJson || e.srv || e instanceof TypeError || e instanceof SyntaxError || /fetch|Load failed|network|expected pattern/i.test(String(e.message||"")))); }
 
 /* ---------- สำเนาข้อมูลในเครื่อง (แทนที่ window.storage ซึ่งมีเฉพาะใน Claude Artifact ไม่มีบน GitHub Pages) ---------- */
 function cacheSave(){
@@ -970,10 +1000,22 @@ async function gasLoad(knownRev, timeoutMs, knownTok){
     const q = "api=1&k=" + encodeURIComponent(clubKey()) + (knownRev!=null && knownRev>=0 ? "&rev=" + knownRev + (knownTok? "&tok=" + encodeURIComponent(knownTok) : "") : "");
     /* [24a] ขอแบบ delta เมื่อถือฐานของ rev นั้นอยู่จริง (ไม่งั้นประกอบไม่ได้) */
     const wantD = SYNC.opMode && knownRev!=null && knownRev>=0 && knownTok && __base && __base.rev===Number(knownRev) && __base.tok===String(knownTok);
-    const res = await fetchT(url + (url.indexOf("?")>=0?"&":"?") + q + (wantD? "&d=1" : ""), {method:"GET"}, tmo);
-    const txt = await res.text();
-    SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = txt.length;
-    const out = JSON.parse(txt);
+    const full = url + (url.indexOf("?")>=0?"&":"?") + q + (wantD? "&d=1" : "");
+    let rj;
+    try{
+      rj = await readJson(await fetchT(full, {method:"GET"}, tmo));
+      /* [25a] Code.gs 25a ตอบข้อผิดพลาดฝั่งเซิร์ฟเวอร์เป็น JSON {ok:false,error:"server: …"} → ลองใหม่เหมือนหน้า error */
+      if(rj.out && rj.out.ok===false && /^server/.test(String(rj.out.error||""))){ const er = new Error(String(rj.out.error)); er.srv = true; throw er; }
+    }
+    catch(e1){
+      /* [25a] Google ตอบหน้า error / เน็ตสะดุด → รอ 1.5–3.5 วิ (สุ่ม ไม่ให้ทุกเครื่องยิงพร้อมกัน) แล้วลองอีกครั้งเดียว */
+      if(!transientErr(e1) || Date.now()-t0 > tmo*0.6) throw e1;
+      SYNC.retries = (SYNC.retries||0) + 1; SYNC.lastErr = netErr(e1, tmo);
+      await sleep(1500 + Math.random()*2000);
+      rj = await readJson(await fetchT(full, {method:"GET"}, tmo));
+    }
+    SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = rj.len;
+    const out = rj.out;
     if(out && out.ok===false && out.error==="unauthorized"){
       // รหัสก๊วนไม่ถูกต้อง/ถูกเปลี่ยน — ให้ใส่ใหม่
       lsDel(CLUB_LS); window.__clubKey = null; gasOK = false;
@@ -1012,8 +1054,7 @@ async function gasSave(){
       /* [17b] แปลงเป็นข้อความครั้งเดียว ใช้ทั้งเป็นตัวส่งและสำเนาในเครื่อง (เดิม stringify ก้อน 237 KB 3 รอบต่อการบันทึก) */
       lastRaw = JSON.stringify(db); cacheSave();
       const body = '{"data":' + lastRaw + ',"k":' + JSON.stringify(clubKey()) + ',"by":' + JSON.stringify(meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน") + ',"appVer":' + JSON.stringify(APP_VER) + ',"force":' + JSON.stringify(force) + '}';
-      const res = await fetchT(url, {method:"POST", body}, NET_POST_MS);
-      const out = await res.json();
+      const out = (await readJson(await fetchT(url, {method:"POST", body}, NET_POST_MS))).out;
       SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
       if(out && out.ops && !SYNC.opMode){ SYNC.opMode = true; lsSet("smash-opmode","1"); }   // [18b] เซิร์ฟเวอร์รับเหตุการณ์ได้ — ครั้งถัดไปส่งเหตุการณ์
       if(out && out.ok){ gasOK = true; SYNC.okAt = Date.now(); SYNC.lastErr = ""; serverRev = Number(db.rev)||0; seenRev = serverRev; __forceNext = null; __fullNext = false; SYNC.blocked = null; pendSync(); try{ __base = { rev:serverRev, tok:String(db.saveTok||""), raw:lastRaw }; }catch(e){ __base = null; } return true; }
@@ -1086,12 +1127,24 @@ async function gasSave(){
 const BUSY_MAX_MS = 12000;
 let __busyN = 0, __busyAt = 0;
 function busyActive(){ return __busyN > 0 && (Date.now() - __busyAt) < BUSY_MAX_MS; }
+let __ovT = null;
+function busyShow(msg){
+  const o = document.getElementById("busyOv"); if(!o) return;
+  const t = document.getElementById("busyOvT"); if(t) t.textContent = msg || "กำลังทำงาน… รอสักครู่";
+  o.classList.add("on");
+}
+let __ovHold = false;
+function busyHide(force){ if(__ovHold && !force) return; clearTimeout(__ovT); __ovT = null; const o = document.getElementById("busyOv"); if(o) o.classList.remove("on"); }
 function busyOn(btn){
   __busyN++; __busyAt = Date.now();
+  /* [25a] งานที่เกิน 0.3 วิ → ขึ้นนาฬิกาทรายใหญ่เต็มจอ ให้เห็นชัดว่าต้องรอ (ปิดเองเมื่อเสร็จ หรือครบ 12 วิ) */
+  if(!__ovT) __ovT = setTimeout(function(){ if(busyActive()) busyShow(); __ovT = null; }, 300);
+  setTimeout(function(){ if(!busyActive()) busyHide(); }, BUSY_MAX_MS + 50);
   if(btn && !btn.classList.contains("busy")){ btn.classList.add("busy"); btn.setAttribute("aria-busy","true"); }
 }
 function busyOff(){
   __busyN = Math.max(0, __busyN - 1);
+  if(!__busyN) busyHide();
   if(!__busyN) document.querySelectorAll("button.busy").forEach(b=>{ b.classList.remove("busy"); b.removeAttribute("aria-busy"); });
 }
 document.addEventListener("click", function(e){
@@ -1126,8 +1179,15 @@ async function gasSendOps(){
   try{
     const baseRev = serverRev;
     const body = JSON.stringify({ op:1, d:1, baseTok:(__base && __base.rev===baseRev)? __base.tok : "", k:clubKey(), by:(meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน"), appVer:APP_VER, baseRev, ops, client });
-    const res = await fetchT(url, {method:"POST", body}, NET_POST_MS);
-    const out = await res.json();
+    let out;
+    try{ out = (await readJson(await fetchT(url, {method:"POST", body}, NET_POST_MS))).out; }
+    catch(e1){
+      /* [25a] ส่งซ้ำได้ปลอดภัย: เซิร์ฟเวอร์กันซ้ำด้วย id ของเหตุการณ์ */
+      if(!transientErr(e1)) throw e1;
+      SYNC.retries = (SYNC.retries||0) + 1;
+      await sleep(1200 + Math.random()*1800);
+      out = (await readJson(await fetchT(url, {method:"POST", body}, NET_POST_MS))).out;
+    }
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
     if(out && out.ok===false && out.error==="app-outdated"){
       SYNC.newerVer = out.minVer || "ใหม่กว่า"; showVerOverlay();
@@ -1218,7 +1278,7 @@ async function storeFlush(){
   } finally{ __saving = false; }
   if(gasUrl() && !ok){
     SYNC.pending = true;
-    toast("⚠️ ส่งขึ้นระบบกลางไม่สำเร็จ — เก็บไว้ในเครื่องแล้ว ระบบจะส่งให้เองเมื่อเน็ตกลับมา", true);
+    toast("⚠️ ยังส่งไม่ได้ — เก็บไว้ในเครื่อง จะส่งให้เอง", true);
     cloudChip("fail");
   } else { SYNC.pending = false; cloudChip("ok"); }
   updateSyncBadge();
@@ -1278,6 +1338,7 @@ function syncLabel(){
 function updateSyncBadge(){
   document.querySelectorAll(".verLbl").forEach(x=> x.textContent = APP_VER);
   try{ updateHealthBanner(); }catch(e){}
+  try{ updateMsgBanner(); }catch(e){}
   const el = document.getElementById("storageWarn");
   if(!el) return;
   el.onclick = openSyncInfo;
@@ -1285,15 +1346,15 @@ function updateSyncBadge(){
   const g = inputGate();
   if(g && g.level==="stop"){
     el.style.display="block"; el.style.background="rgba(255,92,92,.14)"; el.style.borderColor="rgba(255,92,92,.5)"; el.style.color="#ff8a8a";
-    el.innerHTML = g.msg + " • <u>แตะเพื่อแก้</u>";
+    el.innerHTML = g.msg;
     el.onclick = SYNC.newerVer? showVerOverlay : SYNC.blocked? showBlockedModal : openSyncInfo;
     return;
   }
   el.style.background=""; el.style.borderColor=""; el.style.color="";
-  if(g && g.level==="warn"){ el.style.display="block"; el.innerHTML = g.msg + " • <u>แตะดูรายละเอียด</u>"; }
-  else if(gasUrl() && SYNC.pending){ el.style.display="block"; el.innerHTML="⏳ มีข้อมูลค้างส่ง — เก็บไว้ในเครื่องแล้ว จะส่งให้อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
+  if(g && g.level==="warn"){ el.style.display="block"; el.innerHTML = g.msg; }
+  else if(gasUrl() && SYNC.pending){ el.style.display="block"; el.innerHTML="⏳ รอส่ง — เก็บไว้ในเครื่องแล้ว"; }
   else if(gasUrl() && (gasOK || softFail())){ el.style.display="none"; }   // [11a] พลาดครั้งเดียวหลังเพิ่งสำเร็จ → ไม่รบกวนผู้ใช้
-  else if(gasUrl() && !gasOK){ el.style.display="block"; el.innerHTML="⚠️ ซิงก์ไม่สำเร็จชั่วคราว — จะลองใหม่อัตโนมัติ • <u>แตะดูรายละเอียด</u>"; }
+  else if(gasUrl() && !gasOK){ el.style.display="block"; el.innerHTML="⚠️ เชื่อมต่อสะดุด — กำลังลองใหม่"; }
   else if(storageOK){ el.style.display="none"; }
   else { el.style.display="block"; el.innerHTML="⚠️ โหมดทดลอง — <u>แตะดูรายละเอียด</u>"; }
 }
@@ -2228,6 +2289,7 @@ const I18N = {
 "(คุณ)":"(you)",
 "คุณ)":"you)",
 "นัดตี":"Sessions",
+"เปิดตี":"Sessions",
 "สมาชิก":"Members",
 "สถิติ":"Stats",
 "ประวัติ":"History",
@@ -2353,7 +2415,10 @@ function toast(msg, err){
 }
 function modal(html){
   /* ก่อนเปิดฟอร์มใดๆ ถ้ามีข้อมูลใหม่จากเพื่อนพักไว้อยู่ ให้ใช้ก่อน — ฟอร์มจะได้เริ่มจากข้อมูลล่าสุด ไม่ใช่ของค้าง */
-  if(__pendingRemote && !modalOpen()){ const r = __pendingRemote; __pendingRemote = null; applyRemote(r); }
+  /* [25a] เดิมมีเงื่อนไข !modalOpen() ทำให้คนที่กดเปลี่ยนจากหน้าต่างหนึ่งไปอีกหน้าต่างหนึ่งต่อเนื่อง
+     (เช่น ค่าตีของฉัน → แจ้งจ่าย → แนบสลิป) ไม่เคยได้รับข้อมูลใหม่เลย = ต้นเหตุยอด Parin 25 ก.ย. 69
+     การเปิดหน้าต่างใหม่คือจังหวะที่ปลอดภัย เพราะหน้าใหม่วาดจากข้อมูลล่าสุดทั้งหมดอยู่แล้ว */
+  if(__pendingRemote){ const r = __pendingRemote; __pendingRemote = null; applyRemote(r); }
   const g = inputGate();
   const strip = g? `<div class="banner-warn" style="margin:-4px 0 10px; ${g.level==="stop"?"background:rgba(255,92,92,.14);border-color:rgba(255,92,92,.5);color:#ff8a8a;":""}">${g.msg}${g.level==="stop"?"":" • <u onclick=\"pollRemote();updateSyncBadge();\" style=\"cursor:pointer;\">อัปเดตเดี๋ยวนี้</u>"}</div>` : "";
   $("modalBody").innerHTML = strip + html; translateDom($("modalBody")); $("modalBg").classList.add("show");
@@ -2365,13 +2430,13 @@ function inputGate(){
   if(!gasUrl()) return null;
   const sinceOk = SYNC.okAt? Date.now()-SYNC.okAt : Infinity;
   const playing = db && db.sessions && db.sessions.some(x=>x.status==="playing");
-  if(SYNC.newerVer) return { level:"stop", msg:"🔄 แอปในเครื่องนี้เป็นรุ่นเก่า ("+APP_VER+") เพื่อนใช้รุ่น "+SYNC.newerVer+" แล้ว — กรุณาปิดแอปแล้วเปิดใหม่ก่อนป้อนข้อมูล" };
-  if(SYNC.blocked) return { level:"stop", msg:"⛔ ระบบกลางไม่รับการแก้ไขล่าสุดของคุณ — อย่าป้อนต่อ แตะแถบด้านบนเพื่อดูวิธีแก้" };
-  if(SYNC.bootStale) return { level:"stop", msg:"📴 เปิดแอปจากสำเนาในเครื่อง ยังไม่ได้ข้อมูลล่าสุดจากก๊วน — รอให้เชื่อมต่อได้ก่อน หรือปิดแอปแล้วเปิดใหม่" };
-  if(SYNC.bootSyncing) return { level:"warn", msg:"🕐 กำลังดึงข้อมูลล่าสุดจากก๊วน — ดูได้เลย ถ้าจะบันทึกรอสักครู่" };
-  if(__pollFail>=2 || (!gasOK && sinceOk > STALE_PLAY_MS)) return { level:"warn", msg:"⚠️ ติดต่อระบบกลางไม่ได้ "+Math.round(Math.min(sinceOk,9e6)/1000)+" วิ — รอให้แถบสถานะกลับเป็นปกติก่อนกดบันทึก มิฉะนั้นข้อมูลอาจไปทับของเพื่อน" };
-  if(sinceOk > (playing? STALE_PLAY_MS : STALE_IDLE_MS)) return { level:"warn", msg:"⏳ ข้อมูลในเครื่องอัปเดตล่าสุด "+Math.round(sinceOk/1000)+" วิที่แล้ว — กำลังดึงข้อมูลใหม่ รอสักครู่ก่อนกดต่อ" };
-  if(SYNC.pending) return { level:"warn", msg:"⏳ ยังมีรายการของคุณค้างส่ง — รอให้ส่งสำเร็จก่อนป้อนรายการถัดไป" };
+  if(SYNC.newerVer) return { level:"stop", msg:"🔄 แอปรุ่นเก่า — ปิดแล้วเปิดใหม่ก่อนใช้งาน" };
+  if(SYNC.blocked) return { level:"stop", msg:"⛔ ระบบกลางไม่รับรายการล่าสุด — หยุดก่อน แตะเพื่อดู" };
+  if(SYNC.bootStale) return { level:"stop", msg:"📴 ยังไม่ได้ข้อมูลล่าสุด — กำลังเชื่อมต่อใหม่ รอสักครู่" };
+  if(SYNC.bootSyncing) return { level:"warn", msg:"🕐 กำลังดึงข้อมูลล่าสุด…" };
+  if(__pollFail>=2 || (!gasOK && sinceOk > STALE_PLAY_MS)) return { level:"warn", msg:"⚠️ ติดต่อระบบกลางไม่ได้ — รอก่อนกดบันทึก" };
+  if(sinceOk > (playing? STALE_PLAY_MS : STALE_IDLE_MS)) return { level:"warn", msg:"⏳ กำลังอัปเดตข้อมูล รอสักครู่" };
+  if(SYNC.pending) return { level:"warn", msg:"⏳ กำลังส่งรายการของคุณ…" };
   return null;
 }
 function closeModal(){
@@ -2399,7 +2464,7 @@ function blockedNewSessionNote(s){
   </div>`;
 }
 function stepper(cur, sid){
-  const steps = [["📅","เปิดนัด"],["🙋","ลงชื่อ"],["🏟️","จองคอร์ท"],["🏸","เริ่มตี"],["🏁","สรุปผล"]];
+  const steps = [["📅","นัดตี"],["🙋","ลงชื่อ"],["🏟️","จองคอร์ท"],["🏸","เริ่มตี"],["🏁","สรุปผล"]];
   return `<div class="stepper">${steps.map((t,i)=>`
     <div class="step ${i+1<cur?"done":""} ${i+1===cur?"cur":""}" onclick="stepClick(${i+1},'${sid||""}')"><span class="s-n">${i+1<cur?"✓":"Step "+(i+1)}</span>${t[0]} ${t[1]}</div>`).join("")}</div>`;
 }
@@ -2668,6 +2733,7 @@ function loginDone(){
   updateSyncBadge();
   renderAll();
   toast("สวัสดี "+nameOf(meId)+" "+emojiOf(meId));
+  if(window.__shareWait) takeSharedSlip();
 }
 function confirmLogout(){ if(confirm("ออกจากแอป (Log-out) ตอนนี้?\nครั้งถัดไปต้องใส่ PIN ใหม่")) logout(); }
 function logout(){
@@ -2710,6 +2776,7 @@ function renderAll(){
   document.querySelectorAll(".bn-item").forEach(b=> b.classList.toggle("on", b.dataset.v===curView));
   document.querySelectorAll(".view").forEach(el=> el.classList.toggle("on", el.id==="v-"+curView));
   document.querySelectorAll(".langLbl").forEach(el=> el.textContent = LANG==="en" ? "ไทย" : "EN");
+  try{ updateMsgBanner(); }catch(e){}
   translateDom($("appView"));
 }
 function renderMeCap(){
@@ -2726,7 +2793,7 @@ function mainMenu(){
   return `<div class="menu-grid">
     <button class="menu-btn" onclick="openPastList()"><span class="mi">🏁</span>สรุปนัดที่ผ่านมา</button>
     <button class="menu-btn" onclick="openMyPay()"><span class="mi">💰</span>จ่ายเงินค่าตี</button>
-    <button class="menu-btn" onclick="openAbout()"><span class="mi">ℹ️</span>เกี่ยวกับ App${fbCount? ` (${fbCount})`:""}</button>
+    <button class="menu-btn" onclick="openMsgBox()"><span class="mi">✉️</span>ข้อความ${fbCount? ` (${fbCount})`:""}</button>
     <button class="menu-btn" onclick="openManageMenu()"><span class="mi">⚙️</span>จัดการก๊วน</button>
   </div>`;
 }
@@ -3414,7 +3481,31 @@ function fbMyThreads(){ return fbThreads().filter(fbCanSee); }
 /* จำนวนกระทู้ "มีข้อความใหม่รอฝั่งเรา" — ผู้จัดการ: ข้อความล่าสุดมาจากสมาชิก / สมาชิก: ข้อความล่าสุดมาจากผู้จัดการ */
 function fbBadgeCount(){
   if(!meId || !me()) return 0;
-  return fbMyThreads().filter(t=> isMgrRole(meId) ? !isMgrRole(t.last.from) : isMgrRole(t.last.from)).length;
+  const th = fbMyThreads().filter(t=> isMgrRole(meId) ? !isMgrRole(t.last.from) : isMgrRole(t.last.from)).length;
+  return th + (isMgrRole(meId)? payNotesNew() : 0);
+}
+/* [25a] ข้อความที่สมาชิกแนบตอนแจ้งจ่าย (payReq/payInfo.note) — รวมเข้ากล่องข้อความของ Admin/ผู้จัดการ
+   "ใหม่" = เขียนหลังจากที่เครื่องนี้เปิดกล่องข้อความครั้งล่าสุด (จำต่อเครื่อง) */
+const NOTES_SEEN_LS = "smash-notes-seen";
+function payNotes(){
+  const out = [], cut = Date.now() - 45*86400000;
+  (db.sessions||[]).forEach(s=>{
+    [["payReq","รออนุมัติ"],["payInfo","อนุมัติแล้ว"]].forEach(([k,lbl])=>{
+      Object.keys(s[k]||{}).forEach(mid=>{
+        const v = s[k][mid];
+        if(v && v.note && (v.at||0) > cut) out.push({ sid:s.id, date:s.date, mid, note:v.note, at:v.at||0, st:lbl });
+      });
+    });
+  });
+  return out.sort((a,b)=> b.at-a.at);
+}
+function payNotesNew(){ const seen = Number(lsGet(NOTES_SEEN_LS)||0); return payNotes().filter(x=> x.at > seen && x.mid!==meId).length; }
+function updateMsgBanner(){
+  const el = document.getElementById("msgWarn"); if(!el) return;
+  const n = (meId && me() && db)? fbBadgeCount() : 0;
+  if(!n){ el.style.display = "none"; return; }
+  el.style.display = "block";
+  el.textContent = "✉️ มีข้อความใหม่ " + n + " รายการ — แตะเพื่ออ่าน";
 }
 function fbTs(at){ return at? new Date(at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""; }
 
@@ -3496,12 +3587,25 @@ function openMsgBox(){
       <div class="muted" style="font-size:10.5px; text-align:right;">${fbTs(t.last.at)} • ${t.msgs.length} ข้อความ</div>
     </div>`;
   }).join("");
+  const mg = isMgrRole(meId);
+  const seen = Number(lsGet(NOTES_SEEN_LS)||0);
+  const notes = mg? payNotes() : [];
+  const noteRows = notes.map(x=>`<div class="set-card" style="cursor:pointer;" onclick="${x.st==="รออนุมัติ"? `openPayReview('${x.sid}','${x.mid}')` : `openPayment('${x.sid}')`}">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:700; font-size:13.5px;">${emojiOf(x.mid)} ${esc(nameOf(x.mid))}</span>
+        ${x.at > seen && x.mid!==meId? '<span class="tag tag-play" style="font-size:10px; padding:2px 8px;">ใหม่</span>':""}
+      </div>
+      <div class="notx" style="font-size:13.5px; margin-top:3px;">📝 ${esc(x.note)}</div>
+      <div class="muted" style="font-size:10.5px; text-align:right;">นัด ${fmtDateShort(x.date)} • ${x.st} • ${fbTs(x.at)}</div>
+    </div>`).join("");
+  if(mg){ lsSet(NOTES_SEEN_LS, String(Date.now())); setTimeout(updateMsgBanner, 0); }
   modal(`
     <div class="modal-head"><h3>📥 กล่องข้อความ (${ths.length})</h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <button class="btn btn-lime btn-block" style="margin-bottom:12px;" onclick="openMsgCompose()">✍️ เริ่มข้อความใหม่</button>
+    <button class="btn btn-lime btn-block" style="margin-bottom:12px;" onclick="openMsgCompose()">✍️ ${mg? "เริ่มข้อความใหม่" : "ส่งข้อความถึง Admin / ผู้จัดการ"}</button>
     ${rows || '<div class="empty"><div class="big">📭</div>ยังไม่มีข้อความ</div>'}
+    ${mg? `<div class="divider"></div><h3 style="margin:4px 0 8px;">📝 ข้อความแนบตอนแจ้งจ่าย (${notes.length})</h3>${noteRows || '<div class="muted" style="font-size:13px;">ยังไม่มี</div>'}`:""}
     <div style="height:10px;"></div>
-    <button class="btn btn-ghost btn-block" onclick="openAbout()">◀️ ย้อนกลับ</button>`);
+    <button class="btn btn-ghost btn-block" onclick="openAbout()">ℹ️ เกี่ยวกับ App</button>`);
 }
 
 function openMsgCompose(prefill){
@@ -3889,10 +3993,35 @@ function openFeeEstimate(sid){
   histOpen = sid;
   modal(renderPaymentHtml(s));
 }
+/* ---------- [25a] ข้อมูลสดก่อนเรื่องเงิน ----------
+   หน้าจ่ายเงิน/แจ้งจ่าย/แนบสลิป ต้องแสดงยอดจากข้อมูลล่าสุดเสมอ: ถ้าในเครื่องยังไม่ยืนยันกับส่วนกลางใน maxAge
+   จะดึงใหม่ก่อน (ขึ้นนาฬิกาทรายใหญ่ระหว่างรอ) และรับข้อมูลใหม่ทันทีแม้มีหน้าต่างเปิดอยู่ */
+function isFresh(maxAge){
+  return !!(gasOK && SYNC.okAt && (Date.now()-SYNC.okAt) < maxAge && !SYNC.bootStale && !SYNC.bootSyncing && !__pendingRemote);
+}
+async function ensureFresh(maxAge, msg){
+  if(!gasUrl()) return true;
+  if(__pendingRemote){ const r = __pendingRemote; __pendingRemote = null; applyRemote(r); }
+  if(isFresh(maxAge||20000)) return true;
+  const tm = setTimeout(function(){ __ovHold = true; busyShow(msg || "กำลังดึงยอดล่าสุด…"); }, 250);
+  try{
+    if(__saving && __flushP){ try{ await __flushP; }catch(e){} }
+    for(let k=0; k<2; k++){
+      const r = await gasLoad(SYNC.pending? -1 : serverRev, 15000, SYNC.pending? null : (db && db.saveTok));
+      if(r==="same"){ __pollFail = 0; SYNC.bootStale = false; return true; }
+      if(r){ __pollFail = 0; SYNC.bootStale = false; SYNC.bootSyncing = false; if(remoteNewer(r)) applyRemote(r); else { serverRev = seenRev = Number(r.rev)||serverRev; } return true; }
+      if(k===0) await sleep(1500 + Math.random()*1500);
+    }
+    return false;
+  } finally { clearTimeout(tm); __ovHold = false; if(!busyActive()) busyHide(true); updateSyncBadge(); }
+}
 /* ล็อกยอดของคนที่แจ้งจ่าย/ถูกกดจ่ายแล้ว ระหว่างนัดยังไม่จบ (บันทึกเป็น feeOverride)
    → ถ้ามีเปลี่ยนลูก/แก้ค่าคอร์ทหลังจากนั้น ยอดคนนี้ไม่ขยับ ส่วนต่างเฉลี่ยให้คนที่เหลือ */
 function freezeFee(s, mid){
-  if(!s || s.status==="done") return;
+  /* [25a] ล็อกยอดระหว่างนัดได้เฉพาะเมื่อ "กำลังตี" และข้อมูลในเครื่องเพิ่งยืนยันกับส่วนกลาง (≤20 วิ)
+     เดิมเครื่องที่ข้อมูลค้าง (ไม่รู้ว่านัดปิดแล้ว) ส่งยอดเก่าขึ้นไปทับยอดที่ผู้จัดการตรึงตอนปิดนัด */
+  if(!s || s.status!=="playing") return;
+  if(gasUrl() && !isFresh(20000)) return;
   const a = (s.attendees||[]).find(x=>x.memberId===mid);
   if(!a || hasOverride(a)) return;
   const v = costSplit(s)[mid];
@@ -4000,7 +4129,7 @@ function renderPaymentHtml(s){
   return `
     <div class="modal-head"><h3>${s.status==="done"? "💰 การจ่ายเงิน" : "💰 ประเมินค่าตี (นัดยังไม่จบ)"} — นัด ${fmtDateShort(s.date)}</h3><button class="mclose" onclick="closeModal()">✕</button></div>
 
-    ${s.status!=="done"? `<div class="banner-warn" style="margin-bottom:12px;">⏱️ นัดยังตีอยู่ — ยอดเป็น<b>ยอดประเมิน</b> จ่ายก่อนกลับได้ ยอดที่จ่ายแล้วจะล็อกไว้</div>`:""}
+    ${s.status!=="done"? `<div class="banner-warn" style="margin-bottom:12px;">⏱️ ยังตีอยู่ — เป็นยอดประเมิน จ่ายก่อนกลับได้</div>`:""}
 
     <div class="sum-total">
       <div class="muted">ค่าใช้จ่ายรวมทั้งนัด</div>
@@ -4008,17 +4137,7 @@ function renderPaymentHtml(s){
       <div class="muted">คอร์ท ${money(courtCost(s))} + ลูก ${money(shuttleCost(s))} • จ่ายแล้ว ${paidCount}/${s.attendees.length} คน</div>
     </div>
 
-    ${(()=>{ // 💳 วิธีการจ่ายเงิน (ข้อความจากผู้จัดการ + QR code)
-      const pn = (db.settings&&db.settings.payNote)||"";
-      const pq = (db.settings&&db.settings.payQR)||"";
-      if(!pn && !pq && !canMg) return "";
-      return `<div class="card" style="margin-bottom:12px;">
-        <div class="row"><h3 style="margin:0;">💳 วิธีการจ่ายเงิน</h3>${canMg? `<button class="btn btn-ghost btn-sm" onclick="openPayInfoEdit('${s.id}')">✏️ แก้ไข</button>`:""}</div>
-        ${pn? `<div class="notx" style="white-space:pre-wrap; font-size:13.5px; line-height:1.65; margin-top:6px;">${esc(pn)}</div>`
-             : (canMg? `<div class="muted" style="font-size:12px; margin-top:6px;">ยังไม่มีข้อความวิธีจ่าย — กด ✏️ แก้ไข เพื่อใส่ เช่น เลขบัญชี/พร้อมเพย์ และแนบรูป QR</div>`:"")}
-        ${pq? `<img src="${pq}" style="width:100%; max-width:240px; display:block; margin:10px auto 0; border-radius:12px; cursor:pointer; background:#fff;" onclick="viewPayQR()" alt="QR"><div class="muted" style="text-align:center; font-size:10.5px; margin-top:4px;">แตะรูปเพื่อขยาย QR</div>`:""}
-      </div>`;
-    })()}
+    ${payMethodCard(canMg? s.id : null)}
     ${canMg? `<div class="frow" style="margin-bottom:10px;">
       <button class="btn btn-sm ${s.costMode!=="hours"?"btn-lime":"btn-ghost"}" style="flex:1;" onclick="setCostMode('${s.id}','equal')">หารเท่ากัน</button>
       <button class="btn btn-sm ${s.costMode==="hours"?"btn-lime":"btn-ghost"}" style="flex:1;" onclick="setCostMode('${s.id}','hours')">หารตามชั่วโมง</button>
@@ -4041,6 +4160,32 @@ function renderPaymentHtml(s){
     <button class="btn btn-ghost btn-block btn-sm" onclick="openSummary('${s.id}')">📊 สรุปผลนัดนี้</button>`;
 }
 
+/* ---------- [25a] การ์ด "วิธีการจ่ายเงิน" ใช้ร่วมทุกหน้าจ่ายเงิน ----------
+   แยกทีละบรรทัด • เลขพร้อมเพย์/เลขบัญชี (ตัวเลข 9–15 หลัก) มีปุ่ม "คัดลอก" ที่คัดลอกเฉพาะตัวเลขไปวางในแอปธนาคาร
+   ข้อความทั้งหมดกดค้างเลือกเองได้ (เปิด user-select) — แก้ปัญหา iPhone หาเบอร์ไม่เจอ/คัดลอกไม่ได้ */
+function payNums(line){
+  const out = [];
+  String(line||"").replace(/(\d[\d\s-]{7,20}\d)/g, function(m){ const d = m.replace(/[^\d]/g,""); if(d.length>=9 && d.length<=15) out.push({ raw:m, d }); return m; });
+  return out;
+}
+function payMethodCard(editSid){
+  const pn = (db.settings&&db.settings.payNote)||"";
+  const pq = (db.settings&&db.settings.payQR)||"";
+  if(!pn && !pq && !editSid) return "";
+  const lines = pn.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const html = lines.map(line=>{
+    const nums = payNums(line);
+    let txt = esc(line);
+    nums.forEach(n=>{ txt = txt.replace(esc(n.raw), `<span class="pnum">${esc(n.raw)}</span>`); });
+    const btn = nums.length? `<button class="btn btn-lime btn-sm pcopy" onclick="copyText('${nums[0].d}','📋 คัดลอก ${nums[0].d} แล้ว — วางในแอปธนาคารได้เลย')">📋 คัดลอก</button>` : "";
+    return `<div class="pline"><span class="ptxt notx">${txt}</span>${btn}</div>`;
+  }).join("");
+  return `<div class="card paycard" style="margin-bottom:12px;">
+    <div class="row"><h3 style="margin:0;">💳 วิธีการจ่ายเงิน</h3>${editSid? `<button class="btn btn-ghost btn-sm" onclick="openPayInfoEdit('${editSid}')">✏️ แก้ไข</button>`:""}</div>
+    ${html || (editSid? `<div class="muted" style="font-size:12px; margin-top:6px;">ยังไม่มีข้อความ — กด ✏️ แก้ไข เพื่อใส่เลขพร้อมเพย์/บัญชี</div>`:"")}
+    ${pq? `<img src="${pq}" style="width:100%; max-width:240px; display:block; margin:10px auto 0; border-radius:12px; cursor:pointer; background:#fff;" onclick="viewPayQR()" alt="QR">`:""}
+  </div>`;
+}
 /* ---------- [15a] ปุ่มเมนู "จ่ายเงินค่าตี" — รายการของฉันเท่านั้น ตามประวัติการตี (ไม่แสดงของทุกคน) ---------- */
 function myPayItems(){
   const out = [];
@@ -4054,8 +4199,9 @@ function myPayItems(){
   });
   return out.sort((a,b)=> b.s.date.localeCompare(a.s.date));
 }
-function openMyPay(){
+async function openMyPay(){
   warmUploader();
+  const fresh = await ensureFresh(20000);
   const items = myPayItems();
   const owe = items.filter(x=>!x.paid && !x.req);
   const oweSum = owe.reduce((t,x)=>t+x.amt, 0);
@@ -4079,6 +4225,8 @@ function openMyPay(){
       <div class="muted">ค้างจ่าย ${owe.length} นัด</div>
       <div class="n" style="color:${owe.length? "var(--coral)":"var(--lime)"};">${money(oweSum)}</div>
     </div>
+    ${fresh? "" : `<div class="banner-warn" style="margin-bottom:10px;">⚠️ ยอดอาจยังไม่ล่าสุด — รอเชื่อมต่อก่อนโอน</div>`}
+    ${owe.length? payMethodCard(null) : ""}
     ${rows || '<div class="empty"><div class="big">🧾</div>ยังไม่มีนัดที่ต้องจ่าย</div>'}
     <div style="height:12px;"></div>
     <button class="btn btn-ghost btn-block" onclick="openMsgCompose('แจ้งข้อมูลค่าตีไม่ถูกต้อง: ')">✉️ แจ้ง Admin ว่าข้อมูลไม่ถูกต้อง</button>
@@ -4108,13 +4256,18 @@ function payRowClick(sid, mid){
   if(s.payReq && s.payReq[mid]) return openPayReview(sid, mid);
   openPayFor(sid, mid);
 }
-function openPayFor(sid, mid){
+async function openPayFor(sid, mid){
+  await ensureFresh(20000);
   const s = db.sessions.find(x=>x.id===sid); const m = mem(mid); if(!s || !m) return;
+  if(s.paid && s.paid[mid]) return toast("จ่ายแล้ว ✓");
+  if(s.payReq && s.payReq[mid]) return openPayReview(sid, mid);
   const amt = payAmt(s, mid);
   modal(`
     <div class="modal-head"><h3>💸 แจ้งจ่ายเงิน — <span class="notx">${m.emoji} ${esc(m.name)}</span></h3><button class="mclose" onclick="closeModal()">✕</button></div>
-    <div class="row" style="margin-bottom:12px;"><span class="muted">ยอดที่ต้องจ่าย</span><b style="font-size:18px; color:var(--lime);">${money(amt)}</b></div>
+    <div class="row" style="margin-bottom:12px;"><span class="muted">ยอดที่ต้องจ่าย</span><b style="font-size:22px; color:var(--lime);">${money(amt)}</b></div>
+    ${payMethodCard(null)}
     <button class="btn btn-lime btn-block" onclick="openPaySlip('${sid}','${mid}')">🧾 แนบสลิปโอนเงิน</button>
+    ${canPasteImg()? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="pasteSlip('${sid}','${mid}')">📋 วางสลิปที่คัดลอกไว้</button>`:""}
     <div style="height:8px;"></div>
     <button class="btn btn-blue btn-block" onclick="payCash('${sid}','${mid}')">💵 แจ้งจ่ายเงินสด</button>
     ${canManage(s)? `<div style="height:8px;"></div><button class="btn btn-ghost btn-block" onclick="openUnpaidAction('${sid}','${mid}')">⚙️ ตัวเลือกผู้จัดการ (บันทึกรับเงิน / ทวง)</button>`:""}
@@ -4426,8 +4579,7 @@ async function uploadSlipToDrive(dataUrl, label){
   const url = slipUploadUrl(); if(!url) return null;
   try{
     const body = JSON.stringify({ k:clubKey(), name:label||("slip-"+Date.now()), data:dataUrl });
-    const res = await fetchT(url, {method:"POST", body}, 30000);
-    const out = await res.json();
+    const out = (await readJson(await fetchT(url, {method:"POST", body}, 30000))).out;
     if(out && out.ok && out.url) return { slipUrl:out.url, slipId:out.id||null };
   }catch(e){}
   return null;
@@ -4439,9 +4591,11 @@ function openPaySlip(sid, mid){
   inp.onchange = ()=> handleSlipFile(sid, inp, mid);
   inp.click();
 }
-async function handleSlipFile(sid, inp, mid){
+async function handleSlipFile(sid, inp, mid){ const f = inp.files && inp.files[0]; if(f) return handleSlipBlob(sid, f, mid); }
+async function handleSlipBlob(sid, f, mid){
   mid = mid || meId;
-  const f = inp.files && inp.files[0]; if(!f) return;
+  if(!f) return;
+  await ensureFresh(20000);
   const s = db.sessions.find(x=>x.id===sid); if(!s) return;
   toast("กำลังเตรียมรูปสลิป…");
   let dataUrl;
@@ -4454,14 +4608,14 @@ async function handleSlipFile(sid, inp, mid){
     if(dataUrl.length > 260000) return toast("รูปใหญ่เกินไป — ลองครอปเฉพาะส่วนของสลิป", true);
   }catch(e){ return toast("อ่านไฟล์รูปไม่สำเร็จ ลองรูปอื่น", true); }
   const owed = payAmt(s, mid);
-  window.__slipDraft = { sid, mid, dataUrl, amountRead:null, matched:false };
+  window.__slipDraft = { sid, mid, dataUrl, amountRead:null, matched:false, owed };
   modal(`
     <div class="modal-head"><h3>🧾 ยืนยันสลิปโอนเงิน</h3><button class="mclose" onclick="closeModal()">✕</button></div>
     ${mid!==meId? `<p class="muted" style="margin-top:0;">แนบสลิปแทน <span class="notx">${emojiOf(mid)} ${esc(nameOf(mid))}</span></p>`:""}
     <img src="${dataUrl}" class="slip-img" alt="slip">
-    <div class="row" style="margin:10px 0 4px;"><span class="muted">ยอดที่ต้องจ่าย</span><b>${money(owed)}</b></div>
-    <div id="slipOcr" class="muted" style="margin-bottom:10px;">🔎 กำลังอ่านยอดเงินจากสลิปอัตโนมัติ… (ส่งได้เลยไม่ต้องรอ)</div>
-    <div class="field"><input type="text" id="slipNoteInp" maxlength="80" placeholder="ข้อความถึงผู้จัดการ (ไม่บังคับ) เช่น โอนจากบัญชีแม่ / โอนรวม 2 คน"></div>
+    <div class="row" style="margin:10px 0 4px;"><span class="muted">ยอดที่ต้องจ่าย</span><b id="slipOwed">${money(owed)}</b></div>
+    <div id="slipOcr" class="muted" style="margin-bottom:10px;">🔎 กำลังอ่านยอดจากสลิป… (ส่งได้เลย)</div>
+    <div class="field"><input type="text" id="slipNoteInp" maxlength="80" placeholder="ข้อความถึงผู้จัดการ (ถ้ามี)"></div>
     <button class="btn btn-lime btn-block" onclick="submitSlip()">📨 ส่งให้ผู้จัดการอนุมัติ</button>
     <div style="height:8px;"></div>
     <button class="btn btn-ghost btn-block" onclick="closeModal(); openPayment('${sid}');">◀️ ย้อนกลับ</button>`);
@@ -4484,21 +4638,29 @@ async function handleSlipFile(sid, inp, mid){
   }
 }
 async function submitSlip(){
+  const d0 = window.__slipDraft; if(!d0) return;
+  if(!(await ensureFresh(15000, "กำลังตรวจยอดล่าสุดก่อนส่ง…"))) return toast("ยังเชื่อมต่อไม่ได้ — รอสักครู่แล้วกดส่งอีกครั้ง", true);
   const d = window.__slipDraft; if(!d) return;
   const s = db.sessions.find(x=>x.id===d.sid); if(!s) return;
+  const owedNow = payAmt(s, d.mid || meId);
+  if(d.owed!=null && Math.abs(owedNow - d.owed) >= 0.01){
+    d.owed = owedNow;
+    const el = $("slipOwed"); if(el) el.textContent = money(owedNow);
+    return toast("⚠️ ยอดล่าสุดเปลี่ยนเป็น " + money(owedNow) + " — ตรวจแล้วกดส่งอีกครั้ง", true);
+  }
   if(!s.payReq) s.payReq = {};
   const mid = d.mid || meId;
   const note = (($("slipNoteInp")||{}).value||"").trim().slice(0,80);
   /* [17b] บันทึกคำขอทันที รูปอัปโหลดต่อเบื้องหลัง — เดิมต้องรอ Drive ตอบ (2–30 วิ) ก่อนจึงเห็นสถานะ "รออนุมัติ" */
   freezeFee(s, mid);   // นัดยังไม่จบ: ล็อกยอดคนนี้ไว้ตอนแจ้งจ่าย
   s.payReq[mid] = { method:"slip", slip:null, slipUrl:null, slipId:null, slipPending:true,
-    amountRead:d.amountRead, matched:!!d.matched, at:Date.now(), by:meId, note };
+    amountRead:d.amountRead, matched:!!d.matched, at:Date.now(), by:meId, note, owed:Math.round(owedNow*100)/100 };
   pendAdd("payreq", { sid:s.id, mid, obj:s.payReq[mid] });
   const sid = d.sid, dataUrl = d.dataUrl;
   window.__slipDraft = null;
   slipOutboxPut(sid, mid, dataUrl);
   await storeSave(); closeModal(); renderAll(); openPayment(sid);
-  toast("📨 ส่งสลิปแล้ว — รอผู้จัดการอนุมัติ (รูปกำลังอัปโหลดเบื้องหลัง)");
+  toast("📨 ส่งสลิปแล้ว — รอผู้จัดการอนุมัติ");
   slipUploadBg(sid, mid, dataUrl, "slip-"+nameOf(mid)+"-"+(s.date||""));
 }
 /* เขียน/แก้ข้อความสั้นถึงผู้จัดการ หลังส่งสลิป/แจ้งจ่ายแล้ว (คล้ายข้อความตอนลงชื่อเข้าตี) */
@@ -4522,13 +4684,14 @@ async function savePayNote(sid){
 }
 async function payCash(sid, mid){
   mid = mid || meId;
+  if(!(await ensureFresh(15000))) return toast("ยังเชื่อมต่อไม่ได้ — รอสักครู่แล้วลองใหม่", true);
   const s = db.sessions.find(x=>x.id===sid); if(!s) return;
   const owed = payAmt(s, mid);
   const who = mid===meId ? "แจ้งว่าได้จ่ายเงินสด " : "แจ้งว่า "+nameOf(mid)+" ได้จ่ายเงินสด ";
   if(!confirm(who+money(owed)+" ให้ผู้จัดการแล้ว?\nผู้จัดการจะกดยืนยันอีกครั้ง")) return;
   if(!s.payReq) s.payReq = {};
   freezeFee(s, mid);   // นัดยังไม่จบ: ล็อกยอดคนนี้ไว้ตอนแจ้งจ่าย
-  s.payReq[mid] = { method:"cash", at:Date.now(), by:meId };
+  s.payReq[mid] = { method:"cash", at:Date.now(), by:meId, owed:Math.round(owed*100)/100 };
   pendAdd("payreq", { sid:s.id, mid, obj:s.payReq[mid] });
   await storeSave(); renderAll(); openPayment(sid);
   toast("💵 แจ้งจ่ายเงินสดแล้ว — รอผู้จัดการอนุมัติ");
@@ -4558,6 +4721,7 @@ function openPayReview(sid, mid){
     <div class="row" style="margin-bottom:8px;"><span class="muted">ยอดที่ต้องจ่าย</span><b>${money(owed)}</b></div>
     <div class="row" style="margin-bottom:8px;"><span class="muted">วิธีชำระ</span><b>${req.method==="cash"?"💵 เงินสด":"🧾 โอนเงิน (แนบสลิป)"}</b></div>
     <div class="row" style="margin-bottom:10px;"><span class="muted">แจ้งเมื่อ</span><b>${req.at? new Date(req.at).toLocaleString(loc(),{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"-"}</b></div>
+    ${(req.owed!=null && Math.abs(Number(req.owed)-owed)>=0.01)? `<div class="banner-warn" style="margin-bottom:10px;">⚠️ ตอนแจ้งจ่าย เครื่องผู้จ่ายเห็นยอด <b>${money(req.owed)}</b> แต่ยอดปัจจุบันคือ <b>${money(owed)}</b> — ตรวจก่อนอนุมัติ</div>`:""}
     ${req.note? `<div style="margin-bottom:10px; padding:9px 12px; background:rgba(255,194,75,.1); border:1px dashed rgba(255,194,75,.45); border-radius:11px;">📝 ข้อความจากผู้จ่าย: <b class="notx">${esc(req.note)}</b></div>`:""}
     ${slipImg(sid, mid, req)? `<img src="${slipImg(sid, mid, req)}" class="slip-img" alt="slip" style="margin-bottom:10px;" referrerpolicy="no-referrer">`
       : (req.slipPending? '<div class="muted" style="margin-bottom:10px;">🧾 รูปสลิปกำลังอัปโหลดจากเครื่องผู้จ่าย — รอสักครู่แล้วเปิดใหม่</div>' : "")}
@@ -4629,6 +4793,51 @@ async function sendNudge(sid, mid){
 /* =====================================================
    คัดลอกข้อความไปวางในไลน์กลุ่ม (LINE)
    ===================================================== */
+/* [25a] คัดลอกข้อความสั้น (เลขพร้อมเพย์/บัญชี) — ทางสำรองสำหรับ iPhone ต้องใช้ setSelectionRange */
+async function copyText(text, msg){
+  let ok = false;
+  try{ if(navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext){ await navigator.clipboard.writeText(text); ok = true; } }catch(e){}
+  if(!ok){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly",""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px;";
+      document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+      ok = document.execCommand("copy"); document.body.removeChild(ta);
+    }catch(e){}
+  }
+  if(ok) toast(msg || "📋 คัดลอกแล้ว");
+  else prompt("กดค้างที่ช่องนี้แล้วเลือก \"คัดลอก\"", text);
+}
+/* [25a] วางรูปสลิปจากคลิปบอร์ด (แอปธนาคาร → แชร์ → คัดลอก) — ใช้ได้เมื่อเบราว์เซอร์รองรับการอ่านรูปจากคลิปบอร์ด */
+function canPasteImg(){ return !!(navigator.clipboard && navigator.clipboard.read && window.isSecureContext); }
+async function pasteSlip(sid, mid){
+  try{
+    const items = await navigator.clipboard.read();
+    for(const it of items){
+      const tp = (it.types||[]).find(x=>/^image\//.test(x));
+      if(tp){ const b = await it.getType(tp); return handleSlipBlob(sid, b, mid); }
+    }
+    toast("ในคลิปบอร์ดไม่มีรูปสลิป — คัดลอกรูปจากแอปธนาคารก่อน หรือใช้ปุ่มแนบสลิป", true);
+  }catch(e){ toast("เครื่องนี้วางรูปไม่ได้ — ใช้ปุ่ม \"แนบสลิปโอนเงิน\" แทน", true); }
+}
+/* [25a] รับสลิปที่ "แชร์" มาจากแอปธนาคาร (Android + ติดตั้งแอปจาก Chrome เท่านั้น — iPhone ไม่รองรับ Share Target)
+   sw.js เก็บรูปไว้ใน Cache "smash-share" แล้วเปิดแอปด้วย ?share-slip=1 */
+async function takeSharedSlip(){
+  if(!/[?&]share-slip=1/.test(location.search) || !window.caches) return;
+  if(!meId){ window.__shareWait = true; return; }
+  window.__shareWait = false;
+  try{ history.replaceState(null, "", location.pathname); }catch(e){}
+  let blob = null;
+  try{ const c = await caches.open("smash-share"); const r = await c.match("shared-slip"); if(r){ blob = await r.blob(); await c.delete("shared-slip"); } }catch(e){}
+  if(!blob) return toast("ไม่พบรูปที่แชร์มา — ลองแชร์ใหม่อีกครั้ง", true);
+  await ensureFresh(20000, "กำลังดึงยอดล่าสุด…");
+  const owe = myPayItems().filter(x=>!x.paid && !x.req);
+  if(!owe.length) return toast("ไม่มีนัดที่ค้างจ่าย", true);
+  if(owe.length===1) return handleSlipBlob(owe[0].s.id, blob, meId);
+  window.__sharedBlob = blob;
+  modal(`<div class="modal-head"><h3>🧾 แนบสลิปให้นัดไหน?</h3><button class="mclose" onclick="window.__sharedBlob=null; closeModal()">✕</button></div>
+    ${owe.map(x=>`<button class="btn btn-ghost btn-block" style="margin-bottom:8px;" onclick="handleSlipBlob('${x.s.id}', window.__sharedBlob, meId)">นัด ${fmtDateShort(x.s.date)} — ${money(x.amt)}</button>`).join("")}`);
+}
 async function copyLine(text){
   let ok = false;
   try{
@@ -5488,7 +5697,9 @@ async function delDoneSession(sid){
      เพื่อไม่ให้จอเปลี่ยนกลางคันขณะกรอกฟอร์ม แล้วค่อยอัปเดตให้ตอนปิดหน้าต่าง */
 let __pollTimer = null, __pollFail = 0, __pendingRemote = null;
 function pollDelay(){
-  if(__pollFail) return Math.min(60000, 8000 * Math.pow(2, Math.min(3, __pollFail)));
+  /* [25a] เปิดแอปแล้วยังดึงข้อมูลไม่ได้ → ลองใหม่เร็ว 5–9 วิ (3 รอบแรก) แทนรอ 30 วิ ทั้งหมดสุ่มเหลื่อมกัน */
+  if(SYNC.bootStale && __pollFail < 3) return Math.round(5000 + Math.random()*4000);
+  if(__pollFail) return Math.round(Math.min(60000, 8000 * Math.pow(2, Math.min(3, __pollFail))) * (0.75 + Math.random()*0.5));
   /* [24a] ถี่ 8 วิเฉพาะเครื่องที่ "อยู่ในนัดที่กำลังตี" (ลงชื่อ/เป็นผู้จัดการ) หรือ Admin - คนอื่น 30 วิ
      และสุ่มเหลื่อม ±25% ไม่ให้ทุกเครื่องยิงพร้อมกันหลังมีคนบันทึก */
   const me = meId;
@@ -5613,7 +5824,13 @@ async function init(){
 async function bootSync(cached){
   try{
     const canDelta = !__pend.length;
-    const remote = await gasLoad(canDelta? Number(cached.rev) : null, NET_BOOT_MS, canDelta? cached.saveTok : null);
+    const b0 = Date.now();
+    let remote = await gasLoad(canDelta? Number(cached.rev) : null, NET_BOOT_MS, canDelta? cached.saveTok : null);
+    /* [25a] ครั้งแรกไม่สำเร็จ → ลองต่ออีกไม่เกิน 2 ครั้งภายใน ~60 วิ ก่อนขึ้นแถบแดง */
+    for(let k=0; !remote && k<2 && Date.now()-b0 < 60000; k++){
+      await sleep(2500 + Math.random()*3000);
+      remote = await gasLoad(canDelta? Number(cached.rev) : null, NET_GET_MS, canDelta? cached.saveTok : null);
+    }
     if(remote==="same"){ serverRev = seenRev = Number(cached.rev)||0; SYNC.bootStale = false; }
     else if(remote){
       SYNC.bootStale = false;
@@ -5710,6 +5927,7 @@ async function finishInit(fromNetwork){
   if(meId) renderAll(); else renderLogin();
   schedulePoll();
   try{ slipOutboxResume(); }catch(e){}
+  try{ takeSharedSlip(); }catch(e){}
 }
 init();
 /* PWA: service worker แบบเบาที่สุด เพื่อให้ติดตั้งเป็นแอปได้ (ไม่แคช — ได้เวอร์ชันใหม่เสมอ) */
