@@ -416,7 +416,7 @@ const CLUB_LS = "smash-club-key";   // รหัสเข้าก๊วน (จ
 function lsGet(k){ try{ return window.localStorage? localStorage.getItem(k) : null; }catch(e){ return null; } }
 function lsSet(k,v){ try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){} }
 function lsDel(k){ try{ if(window.localStorage) localStorage.removeItem(k); }catch(e){} }
-const APP_VER = "2026.09.25a";   // [25a] ใช้กับ Code.gs 24a ได้ (ไม่ต้องแก้ฝั่งเซิร์ฟเวอร์) - delta read - ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
+const APP_VER = "2026.10.03a";   // [03a] ลองใหม่อัตโนมัติด้วยเวลารอสั้นต่อครั้ง (ใช้กับ Code.gs 25a เดิม ไม่ต้องแก้ฝั่งเซิร์ฟเวอร์)   // [25a] ใช้กับ Code.gs 24a ได้ (ไม่ต้องแก้ฝั่งเซิร์ฟเวอร์) - delta read - ใช้ยืนยันว่าอัปโหลดไฟล์ใหม่ขึ้น GitHub แล้ว (แสดงในหน้าสถานะการเชื่อมต่อ)
 const ADMIN_NAME = "Nu";
 const APP_URL = "https://anuchawannagon.github.io/smashbad/";  // ลิงก์แอปสำหรับแปะในไลน์กลุ่ม
 const PLAYERS_PER_COURT = 4;
@@ -581,7 +581,10 @@ const CACHE_LS = "smash-db-cache";   // สำเนาข้อมูลล่�
 const PEND_LS  = "smash-pending";    // รายการที่ "เรา" เพิ่งเพิ่ม แต่ยังไม่ยืนยันว่าขึ้นฐานกลางแล้ว
 /* timeout: การเขียนต้องเผื่อเวลามาก เพราะ Apps Script ต้องเขียน Google Sheet ทั้งก้อน
    (ตั้งสั้นเกินไปจะรายงานว่า "ไม่สำเร็จ" ทั้งที่ฝั่งเซิร์ฟเวอร์บันทึกเสร็จแล้ว) */
-const NET_GET_MS = 25000, NET_POST_MS = 45000, NET_BOOT_MS = 40000;   // [11a] 15→25 วิ: มือถือผ่าน LINE ใช้ 2–3 เท่าของเดสก์ท็อป (5.8 วิ) จึงคร่อมเส้น 15 วิพอดี
+const NET_GET_MS = 32000, NET_POST_MS = 50000, NET_BOOT_MS = 42000;   // [03a] เป็น "งบรวม" ของทุกครั้งที่ลอง (เดิมเป็นเวลารอครั้งเดียว 25/45/40 วิ)
+/* [03a] ข้อมูลจริง 25 ก.ย.–2 ต.ค. 69: สคริปต์ทำงานจบใน 0.7–5 วิ ไม่มี Failed/Timed Out เลย แต่มือถือรอจนหมด 40–45 วิ หรือได้ 404
+   = คำขอค้าง/หลุดระหว่างทาง Google → ส่งคำขอใหม่เร็วกว่ารอคำขอเดิม: รอครั้งละสั้น แล้วลองใหม่ภายในงบรวม */
+const NET_TRY_MS = [12000, 18000, 25000];   // [11a] 15→25 วิ: มือถือผ่าน LINE ใช้ 2–3 เท่าของเดสก์ท็อป (5.8 วิ) จึงคร่อมเส้น 15 วิพอดี
 /* [11a] "ผิดพลาดแบบอ่อน": poll พื้นหลังล้มเหลวครั้งเดียวขณะที่เพิ่งซิงก์สำเร็จไม่นาน — ไม่ต้องเตือนผู้ใช้ (ลองใหม่เองอยู่แล้ว) */
 const SOFT_FAIL_MS = 60000;
 function softFail(){ return !gasOK && __pollFail < 2 && SYNC.okAt && (Date.now()-SYNC.okAt) < SOFT_FAIL_MS && !SYNC.pending; }
@@ -609,7 +612,9 @@ async function fetchT(url, opts, ms){
 /* แปลงข้อผิดพลาดให้เป็นข้อความสั้นๆ ที่วินิจฉัยต่อได้ (แสดงในหน้าสถานะการเชื่อมต่อ) */
 function netErr(e, ms){
   if(!e) return "ไม่ทราบสาเหตุ";
-  if(e.name==="AbortError") return "หมดเวลารอ (>"+Math.round(ms/1000)+" วิ)";
+  const tr = (e.tries>1)? " • ลอง " + e.tries + " ครั้ง" : "";   // [03a]
+  if(e.name==="AbortError") return "หมดเวลารอ (>"+Math.round((e.__ms||ms)/1000)+" วิ)" + tr;
+  if(e.nonJson && tr) return "Google ตอบเป็นหน้า error (HTTP " + e.status + ": " + (e.snip||"-") + ")" + tr;
   /* [25a] เก็บหัวข้อของหน้า error ที่ Google ส่งมาจริง (เดิมทิ้งไป จึงไม่รู้ว่าเป็น error ชนิดใด) */
   if(e.srv) return "เซิร์ฟเวอร์ขัดข้องชั่วคราว (" + String(e.message||"").slice(0,90) + ")";
   if(e.nonJson) return "Google ตอบเป็นหน้า error (HTTP " + e.status + ": " + (e.snip||"-") + ")";
@@ -630,6 +635,30 @@ async function readJson(res){
   catch(e){ const er = new Error("nonjson"); er.nonJson = true; er.status = res.status; er.snip = errSnip(txt); throw er; }
 }
 /* [25a] ข้อผิดพลาดชั่วคราวที่ควรลองใหม่ทันที (Google ตอบหน้า error / เน็ตหลุด) — ไม่รวมหมดเวลารอ */
+/* [03a] อ่าน JSON พร้อมลองใหม่ — ลองใหม่ทั้งกรณีหมดเวลา (AbortError) และหน้า error ของ Google (404/HTML/เน็ตหลุด)
+   POST เหตุการณ์ส่งซ้ำได้ปลอดภัย เพราะเซิร์ฟเวอร์กันซ้ำด้วย id (25 ก.ย. 69 ส่งซ้ำ 11 ครั้ง ข้อมูลถูกต้อง) */
+async function fetchJsonRetry(url, opts, budgetMs, firstMs){
+  const t0 = Date.now(); let lastErr = null, tries = 0;
+  for(let i=0; i<NET_TRY_MS.length; i++){
+    const left = budgetMs - (Date.now()-t0);
+    if(left < 4000 && tries) break;
+    const per = Math.max(4000, Math.min((i===0 && firstMs)? firstMs : NET_TRY_MS[i], left));
+    tries++;
+    try{
+      const rj = await readJson(await fetchT(url, opts, per));
+      if(rj.out && rj.out.ok===false && /^server/.test(String(rj.out.error||""))){ const er = new Error(String(rj.out.error)); er.srv = true; throw er; }
+      if(tries>1){ SYNC.recovered = (SYNC.recovered||0) + 1; }
+      return rj;
+    }catch(e){
+      lastErr = e; try{ e.__ms = per; e.tries = tries; }catch(x){}
+      if(!(e && (e.name==="AbortError" || transientErr(e)))) throw e;
+      SYNC.retries = (SYNC.retries||0) + 1; SYNC.lastErr = netErr(e, per);
+      const w = 800 + Math.random()*1700;            // สุ่มช่วงรอ ไม่ให้ทุกเครื่องยิงซ้ำพร้อมกัน
+      if(i < NET_TRY_MS.length-1 && budgetMs-(Date.now()-t0)-w >= 4000) await sleep(w); else break;
+    }
+  }
+  throw lastErr || new Error("หมดเวลารอ");
+}
 function transientErr(e){ return !!(e && e.name!=="AbortError" && (e.nonJson || e.srv || e instanceof TypeError || e instanceof SyntaxError || /fetch|Load failed|network|expected pattern/i.test(String(e.message||"")))); }
 
 /* ---------- สำเนาข้อมูลในเครื่อง (แทนที่ window.storage ซึ่งมีเฉพาะใน Claude Artifact ไม่มีบน GitHub Pages) ---------- */
@@ -1001,19 +1030,9 @@ async function gasLoad(knownRev, timeoutMs, knownTok){
     /* [24a] ขอแบบ delta เมื่อถือฐานของ rev นั้นอยู่จริง (ไม่งั้นประกอบไม่ได้) */
     const wantD = SYNC.opMode && knownRev!=null && knownRev>=0 && knownTok && __base && __base.rev===Number(knownRev) && __base.tok===String(knownTok);
     const full = url + (url.indexOf("?")>=0?"&":"?") + q + (wantD? "&d=1" : "");
-    let rj;
-    try{
-      rj = await readJson(await fetchT(full, {method:"GET"}, tmo));
-      /* [25a] Code.gs 25a ตอบข้อผิดพลาดฝั่งเซิร์ฟเวอร์เป็น JSON {ok:false,error:"server: …"} → ลองใหม่เหมือนหน้า error */
-      if(rj.out && rj.out.ok===false && /^server/.test(String(rj.out.error||""))){ const er = new Error(String(rj.out.error)); er.srv = true; throw er; }
-    }
-    catch(e1){
-      /* [25a] Google ตอบหน้า error / เน็ตสะดุด → รอ 1.5–3.5 วิ (สุ่ม ไม่ให้ทุกเครื่องยิงพร้อมกัน) แล้วลองอีกครั้งเดียว */
-      if(!transientErr(e1) || Date.now()-t0 > tmo*0.6) throw e1;
-      SYNC.retries = (SYNC.retries||0) + 1; SYNC.lastErr = netErr(e1, tmo);
-      await sleep(1500 + Math.random()*2000);
-      rj = await readJson(await fetchT(full, {method:"GET"}, tmo));
-    }
+    /* [03a] ลองใหม่ภายในงบเวลา (เดิมรอครั้งเดียวจนหมด 25–40 วิ และไม่ลองใหม่เมื่อหมดเวลา)
+       ถามแบบมี rev (คำตอบเล็ก) รอครั้งแรก 12 วิ • ขอข้อมูลเต็ม (~210 KB ผ่าน LINE/4G) รอครั้งแรก 16 วิ */
+    const rj = await fetchJsonRetry(full, {method:"GET"}, tmo, (knownRev!=null && knownRev>=0)? 12000 : 16000);
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = rj.len;
     const out = rj.out;
     if(out && out.ok===false && out.error==="unauthorized"){
@@ -1039,7 +1058,7 @@ async function gasLoad(knownRev, timeoutMs, knownTok){
       return null;
     }
     SYNC.lastErr = "เซิร์ฟเวอร์ปฏิเสธคำขออ่าน" + (out && out.error? " ("+out.error+")" : "");
-  }catch(e){ SYNC.fails++; SYNC.lastErr = netErr(e, tmo); }   // [11a] แสดงเวลาที่รอจริง (เดิมขึ้น ">15 วิ" ทั้งที่ตอนบูตรอ 40 วิ)
+  }catch(e){ SYNC.fails++; SYNC.lastErr = netErr(e, tmo); }   // [03a] netErr ใช้เวลารอของครั้งสุดท้าย + จำนวนครั้งที่ลอง   // [11a] แสดงเวลาที่รอจริง (เดิมขึ้น ">15 วิ" ทั้งที่ตอนบูตรอ 40 วิ)
   gasOK = false; return null;
 }
 async function gasSave(){
@@ -1179,15 +1198,9 @@ async function gasSendOps(){
   try{
     const baseRev = serverRev;
     const body = JSON.stringify({ op:1, d:1, baseTok:(__base && __base.rev===baseRev)? __base.tok : "", k:clubKey(), by:(meId? (nameOf(meId)+" ["+meId+"]") : "ยังไม่ล็อกอิน"), appVer:APP_VER, baseRev, ops, client });
-    let out;
-    try{ out = (await readJson(await fetchT(url, {method:"POST", body}, NET_POST_MS))).out; }
-    catch(e1){
-      /* [25a] ส่งซ้ำได้ปลอดภัย: เซิร์ฟเวอร์กันซ้ำด้วย id ของเหตุการณ์ */
-      if(!transientErr(e1)) throw e1;
-      SYNC.retries = (SYNC.retries||0) + 1;
-      await sleep(1200 + Math.random()*1800);
-      out = (await readJson(await fetchT(url, {method:"POST", body}, NET_POST_MS))).out;
-    }
+    /* [03a] ส่งซ้ำได้ปลอดภัย (เซิร์ฟเวอร์กันซ้ำด้วย id) — ลองใหม่ทั้งตอนหมดเวลาและตอนได้ 404
+       ถ้าครั้งก่อนขึ้นชีตไปแล้วแต่คำตอบหลุด ครั้งใหม่จะได้ acked กลับมาเป็นการยืนยันผลในตัว */
+    const out = (await fetchJsonRetry(url, {method:"POST", body}, NET_POST_MS, 15000)).out;
     SYNC.lastMs = Date.now()-t0; SYNC.lastAt = Date.now(); SYNC.bytes = body.length;
     if(out && out.ok===false && out.error==="app-outdated"){
       SYNC.newerVer = out.minVer || "ใหม่กว่า"; showVerOverlay();
